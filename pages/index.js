@@ -18,20 +18,20 @@ export default function Home() {
     setLoading(false);
   }
   return (
-    <div className=\"min-h-screen bg-gray-50 p-6\">
-      <h1 className=\"text-3xl font-bold mb-4\">Lulu Mentor App</h1>
+    <div className="min-h-screen bg-gray-50 p-6\">
+      <h1 className="text-3xl font-bold mb-4\">Lulu Mentor App</h1>
       <textarea
-        className=\"w-full p-3 border rounded mb-4\"
+        className="w-full p-3 border rounded mb-4\"
         rows=\"10\"
-        placeholder=\"Paste your text here...\"
+        placeholder="Paste your text here...\"
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
-      <div className=\"flex gap-4 mb-4\">
+      <div className="flex gap-4 mb-4\">
         <select
           value={editType}
           onChange={(e) => setEditType(e.target.value)}
-          className=\"p-2 border rounded\"
+          className="p-2 border rounded\"
         >
           <option>Developmental</option>
           <option>Structural</option>
@@ -42,14 +42,14 @@ export default function Home() {
         <select
           value={mode}
           onChange={(e) => setMode(e.target.value)}
-          className=\"p-2 border rounded\"
+          className="p-2 border rounded\"
         >
           <option>Suggest Changes</option>
           <option>Rewrite</option>
         </select>
         <button
           onClick={handleSubmit}
-          className=\"bg-blue-600 text-white px-4 py-2 rounded\"
+          className="bg-blue-600 text-white px-4 py-2 rounded\"
           disabled={loading}
         >
           {loading ? 'Thinking...' : 'Submit to Lulu'}
