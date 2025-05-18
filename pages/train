@@ -1,0 +1,74 @@
+import { useState } from 'react';
+
+export default function TrainPage() {
+  const [file, setFile] = useState(null);
+  const [style, setStyle] = useState('neat');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setLoading(true);
+    setMessage('');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('style', style);
+
+    try {
+      const res = await fetch('/api/train', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.learned?.length === 26) {
+        setMessage(`✅ Learned all 26 letters (${style})!`);
+      } else {
+        setMessage(`⚠️ Upload completed, but fewer than 26 letters were processed.`);
+      }
+    } catch (err) {
+      setMessage('❌ Upload failed.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: '2rem', maxWidth: '600px', margin: 'auto' }}>
+      <h1>✍️ Handwriting Calibration</h1>
+      <p>Upload a 5×6 A–Z calibration sheet (handwritten).</p>
+
+      <label>
+        Style:
+        <select value={style} onChange={(e) => setStyle(e.target.value)} style={{ marginLeft: '1rem' }}>
+          <option value="neat">Neat</option>
+          <option value="messy">Messy</option>
+        </select>
+      </label>
+
+      <br /><br />
+      <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} />
+      <br /><br />
+      <button
+        onClick={handleUpload}
+        disabled={!file || loading}
+        style={{
+          padding: '10px 20px',
+          fontSize: '16px',
+          backgroundColor: '#4caf50',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: loading ? 'not-allowed' : 'pointer'
+        }}
+      >
+        {loading ? 'Processing...' : 'Upload Scan'}
+      </button>
+
+      {message && <p style={{ marginTop: '1rem' }}>{message}</p>}
+    </div>
+  );
+}
