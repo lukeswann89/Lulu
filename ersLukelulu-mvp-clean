@@ -1,0 +1,46 @@
+[33m02f46c1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Restore working version of index.js and write.js
+[33mf75f91d[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Fix: add formidable as runtime dependency for Vercel
+[33mb71f8fe[m Add formidable to project dependencies
+[33m8237bf2[m Remove .env.local from Git tracking
+[33mfc12102[m Update README.md
+[33mfa25d6d[m Update ocr.js
+[33m4eee38d[m Update ocr.js
+[33mef5ad0b[m Update ocr.js
+[33m71f72cf[m Update ocr.js
+[33m96d49dd[m Update ocr.js
+[33m048fac3[m Update ocr.js
+[33m389ecb7[m Update ocr.js
+[33m179caff[m Update ocr.js
+[33mcca1a21[m Update .env.local
+[33m548db2c[m Update ocr.js
+[33md06934e[m Create cleanup.js
+[33m7961def[m Rename pages/ocr.js to pages/api/ocr.js
+[33md2ed94c[m Create ocr.js
+[33m1ccde85[m Create write.js
+[33m159514d[m Create .env.local
+[33m557c5e5[m Create .gitignore
+[33mcf05a88[m Update index.js
+[33m3347ca6[m Update index.js
+[33m4b1e5ab[m Update index.js
+[33m5a14738[m Update package.json
+[33m66db6af[m Create _app.js
+[33m8ff82c4[m Create globals.css
+[33me9cd114[m Create postcss.config.js
+[33mf190856[m Create tailwind.config.js
+[33me620b11[m Update index.js
+[33maad06e7[m Update index.js
+[33m01eec6e[m Update index.js
+[33m2e300b7[m Update index.js
+[33m06602dd[m Update index.js
+[33m405a1cf[m Update index.js
+[33m6a27d67[m Update index.js
+[33m70e7bfb[m Update index.js
+[33m6e30e83[m Update gpt.js
+[33m29e2e88[m Update index.js
+[33me8760b0[m Update gpt.js
+[33mfd045ba[m Update gpt.js
+[33m8a7d5f2[m Create package.json
+[33mda67008[m Create SuggestionPanel.js
+[33mf57b0ce[m Create gpt.js
+[33mfe95959[m Create index.js
+[33mce486a3[m Initial commit

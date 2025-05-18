@@ -1,0 +1,1042 @@
+{
+  "a": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "b": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "c": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "d": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "e": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "f": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "g": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "h": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "i": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "j": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "k": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "l": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "m": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "n": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "o": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "p": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "q": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "r": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "s": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "t": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "u": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "v": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "w": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "x": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "y": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "z": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "A": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "B": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "C": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "D": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "E": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "F": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "G": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "H": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "I": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "J": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "K": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "L": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "M": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "N": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "O": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "P": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "Q": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "R": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "S": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "T": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "U": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "V": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "W": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "X": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "Y": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  },
+  "Z": {
+    "neat": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    },
+    "messy": {
+      "sources": {
+        "OCR": 0,
+        "Vision": 0,
+        "Trainer": 0,
+        "Handprint": 0
+      },
+      "confirmed": false
+    }
+  }
+}
