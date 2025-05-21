@@ -11,7 +11,8 @@ function stripCodeBlocks(str) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'POST')
+    return res.status(405).json({ error: 'Method not allowed' });
 
   const {
     text,
@@ -28,6 +29,62 @@ export default async function handler(req, res) {
   if (!text || !editType || !mode) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
+  
+if (mode === 'Specific Edits') {
+  return res.status(200).json({
+    suggestions: [
+      {
+        editType: "Line",
+        original: "Please speak to me,",
+        suggestion: "Could you please speak to me?",
+        start: 0,
+        end: 18,
+        why: "Makes it more polite.",
+        principles: ["Clarity"],
+        state: "pending"
+      },
+      {
+        editType: "Proof",
+        original: "their mum's",
+        suggestion: "her mother's",
+        start: 420,
+        end: 430,
+        why: "Consistency in possessive.",
+        principles: ["Consistency"],
+        state: "pending"
+      }
+    ]
+  });
+}
+
+  // *** MOCK BLOCK FOR SPECIFIC EDITS TESTING ***
+  if (mode === "Specific Edits") {
+    return res.status(200).json({
+      suggestions: [
+        {
+          start: 0,
+          end: 6,
+          editType: "Line",
+          original: text.slice(0, 6),
+          suggestion: "Kindly",
+          why: "Makes it more polite.",
+          principles: ["Politeness"],
+          state: "pending"
+        },
+        {
+          start: 34,
+          end: 40,
+          editType: "Proof",
+          original: text.slice(34, 40),
+          suggestion: "Sylvia",
+          why: "Corrects the name.",
+          principles: ["Accuracy"],
+          state: "pending"
+        }
+      ]
+    });
+  }
+  // *** END MOCK BLOCK ***
 
   const editArray = Array.isArray(editType) ? editType : [editType];
   const typeList = editArray.join(', ');
@@ -44,29 +101,33 @@ export default async function handler(req, res) {
   let roadmapTag = roadmapOnly || mode === 'General Edits' ? 'List proposed changes only. DO NOT revise the text.' : '';
   let depthNote = editDepth ? `Apply edits at a ${editDepth.toLowerCase()} level of intensity.` : '';
 
+  const inlineHint = mode === 'Specific Edits'
+    ? 'For each suggestion, in addition to editType, recommendation, etc., include either the exact "original" text, OR { "start": offset, "end": offset } referencing the matching span of text in the input.' : '';
+
   const chunks = chunkText(text);
-  let combinedContent = '';
   const rawOutputs = [];
   const failedChunks = [];
 
   try {
     for (const chunk of chunks) {
-      // Compose full prompt for General Edits + Writer's Edit
+      // Compose the prompt, including inline reference for Specific Edits
       const prompt = `${prefix}
 ${cuePrompt}
 ${depthNote}
 Editing types: ${typeList}
 ${thresholdPrompt}
 ${roadmapTag}
-Provide a grouped, high-level editorial roadmap as a JSON array.
+${inlineHint}
+Provide all output as a JSON array.
 Writer's Editing Notes (if any) should be the first group, as:
 { "editType": "Writer's Edit", "own": "Original note", "lulu": "Your rewritten/improved version", "why": "Why is your version stronger?", "principles": ["Principle1", "Principle2"] }
-For other roadmap suggestions, each item must contain:
-- "editType" (e.g. Developmental, Line)
+For all other suggestions, each item must contain:
+- "editType" (e.g. Developmental, Line, Copy, Proof)
 - "recommendation" (the suggestion)
 - "priority" (High, Medium, Low)
 - "why" (brief justification)
 - "principles" (array of 1–2 principles)
+${mode === 'Specific Edits' ? '- "original": the exact text span, and/or "start"/"end" offsets if possible.' : ''}
 Return ONLY a valid JSON array, no other commentary.
 Text:
 ${chunk}`;
@@ -81,7 +142,6 @@ ${chunk}`;
       if (result.startsWith('```')) result = stripCodeBlocks(result);
       result = result.replace(/^json\s*[\r\n]+/i, '').trim();
       rawOutputs.push(result);
-      combinedContent += result + '\n';
     }
 
     // Parse and flatten all roadmap items
@@ -96,7 +156,9 @@ ${chunk}`;
       }
     }
 
-    // All logic for General Edits + Writer's Editing Notes
+    // Mark up editType for frontend multi-layer highlighting (Dev/Line/Proof, etc.)
+    // Each suggestion's "editType" field should be used by the UI for coloring and badges.
+
     return res.status(200).json({ roadmap: parsed, failedChunks });
 
   } catch (err) {

@@ -1,18 +1,17 @@
-// /pages/index.js
-
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 
+// DYNAMIC MANUSCRIPT EDITOR
 const LuluEditor = dynamic(() => import('../components/LuluEditor'), { ssr: false })
 
 // --- Edit Types Config ---
 const EDIT_TYPES = [
-  { type: 'Full Edit', icon: '🪄', help: "A comprehensive edit across all types.", color: 'bg-purple-50', iconColor: 'text-purple-500' },
-  { type: 'Developmental', icon: '🖼️', help: "Big picture: plot, characters, theme.", color: 'bg-blue-50', iconColor: 'text-blue-400' },
-  { type: 'Structural', icon: '🪜', help: "Scene/chapter order, pacing, flow.", color: 'bg-green-50', iconColor: 'text-green-400' },
-  { type: 'Line', icon: '📜', help: "Sentence clarity, word choice.", color: 'bg-yellow-50', iconColor: 'text-yellow-400' },
-  { type: 'Copy', icon: '🔍', help: "Grammar, consistency, repetition.", color: 'bg-teal-50', iconColor: 'text-teal-400' },
-  { type: 'Proof', icon: '🩹', help: "Typos, formatting, last details.", color: 'bg-pink-50', iconColor: 'text-pink-400' }
+  { type: 'Full Edit', icon: '🪄', help: "A comprehensive edit across all types.", color: 'bg-purple-50', iconColor: 'text-purple-500', hl: 'ring-purple-400' },
+  { type: 'Developmental', icon: '🖼️', help: "Big picture: plot, characters, theme.", color: 'bg-blue-50', iconColor: 'text-blue-400', hl: 'ring-blue-400' },
+  { type: 'Structural', icon: '🪜', help: "Scene/chapter order, pacing, flow.", color: 'bg-green-50', iconColor: 'text-green-400', hl: 'ring-green-400' },
+  { type: 'Line', icon: '📜', help: "Sentence clarity, word choice.", color: 'bg-yellow-50', iconColor: 'text-yellow-400', hl: 'ring-yellow-400' },
+  { type: 'Copy', icon: '🔍', help: "Grammar, consistency, repetition.", color: 'bg-teal-50', iconColor: 'text-teal-400', hl: 'ring-teal-400' },
+  { type: 'Proof', icon: '🩹', help: "Typos, formatting, last details.", color: 'bg-pink-50', iconColor: 'text-pink-400', hl: 'ring-pink-400' }
 ]
 const EDIT_DEPTHS = ['Light', 'Pro', 'Intensive']
 const PROFILES = ['Voice', 'Professional', 'Publisher: Penguin', 'Reader: YA', 'Creative']
@@ -62,7 +61,35 @@ function AccordionSection({ title, icon, count, children, defaultOpen }) {
   )
 }
 
-// --- Main Page ---
+// --- Highlight helpers for Specific Edits ---
+function highlightManuscript(text, specificEdits, activeIdx, showHighlights, showNumbers) {
+  if (!showHighlights || !specificEdits?.length) return text
+  let out = text
+  // Sort by descending start to avoid index shifting as we insert spans
+  const byStart = [...specificEdits]
+    .filter(s => s.state === 'pending')
+    .map((s, i) => ({...s, idx: i}))
+    .sort((a, b) => b.start - a.start)
+  byStart.forEach((s, i) => {
+    const {start, end, editType, idx} = s
+    if (start == null || end == null || start >= end) return
+    const before = out.slice(0, start)
+    const target = out.slice(start, end)
+    const after = out.slice(end)
+    const meta = getEditMeta(editType)
+    let style = `bg-opacity-40 ring-2 ring-inset px-0.5 rounded cursor-pointer ${meta.hl} ${activeIdx === idx ? 'ring-4 ring-black' : ''}`
+    const sup = showNumbers ? `<sup class='text-xs align-super text-gray-700'>${idx+1}</sup>` : ''
+    out = before +
+      `<span class='lulu-suggestion ${style.replaceAll(' ','-')}' data-sug='${idx}'>${target}${sup}</span>` +
+      after
+  })
+  return out
+}
+function debounce(fn, ms) {
+  let timer; return (...args) => {
+    clearTimeout(timer); timer = setTimeout(() => fn(...args), ms)
+  }
+}
 export default function Home() {
   // --- State ---
   const [editType, setEditType] = useState([])
@@ -84,7 +111,6 @@ export default function Home() {
   const [text, setText] = useState('')
   const [showEditOptions, setShowEditOptions] = useState(true)
   const [logAccordion, setLogAccordion] = useState(false)
-
   // Suggestions Navigation
   const [suggestionView, setSuggestionView] = useState('overview') // overview | focus
   const allSuggestions = [
@@ -95,17 +121,57 @@ export default function Home() {
   ]
   const [focusIndex, setFocusIndex] = useState(0)
   const suggestionsLength = allSuggestions.length
-
   // Deep Dive / Ask Lulu (chat log per suggestion)
   const [expandedSuggestions, setExpandedSuggestions] = useState({})
-  const [deepDiveContent, setDeepDiveContent] = useState({}) // {sKey: mentorCopy}
+  const [deepDiveContent, setDeepDiveContent] = useState({})
   const [deepDiveLoading, setDeepDiveLoading] = useState({})
   const [askLuluInputs, setAskLuluInputs] = useState({})
   const [askLuluLogs, setAskLuluLogs] = useState({})
+  // Specific Edits State
+  const [specificEdits, setSpecificEdits] = useState([])
+  const [showHighlights, setShowHighlights] = useState(true)
+  const [showNumbers, setShowNumbers] = useState(true)
+  const [activeEditIdx, setActiveEditIdx] = useState(null)
+  const [activePanelIdx, setActivePanelIdx] = useState(null)
+  const [focusSpecificIdx, setFocusSpecificIdx] = useState(0)
+  const highlightRefs = useRef({})
+
+  // Panel scroll and highlight logic for Specific Edits
+  useEffect(() => {
+    if (mode === "Specific Edits" && activeEditIdx != null && highlightRefs.current && highlightRefs.current[activeEditIdx]) {
+      highlightRefs.current[activeEditIdx].scrollIntoView({behavior:'smooth', block:'center'})
+    }
+  }, [activeEditIdx, mode])
+
+  useEffect(() => {
+    if (mode !== "Specific Edits" || !showHighlights) return
+    const clickHandler = e => {
+      const tgt = e.target.closest('.lulu-suggestion')
+      if (!tgt) return
+      const idx = +tgt.getAttribute('data-sug')
+      setActiveEditIdx(idx)
+      setActivePanelIdx(idx)
+      debounce(() => {
+        if (highlightRefs.current && highlightRefs.current[idx])
+          highlightRefs.current[idx].scrollIntoView({behavior:'smooth', block:'center'})
+      }, 100)()
+    }
+    document.addEventListener('click', clickHandler)
+    return () => document.removeEventListener('click', clickHandler)
+  }, [showHighlights, mode])
+
+  function handlePanelClick(idx) {
+    setActiveEditIdx(idx)
+    setActivePanelIdx(idx)
+    debounce(() => {
+      if (highlightRefs.current && highlightRefs.current[idx])
+        highlightRefs.current[idx].scrollIntoView({behavior:'smooth', block:'center'})
+    }, 100)()
+  }
 
   // --- History logic ---
   function pushHistory(suggestions, writer) {
-    setHistory(h => [...h, { grouped: suggestions, writer }])
+    setHistory(h => [...h, { grouped: suggestions, writer, specific: specificEdits }])
     setRedoStack([])
   }
   function undo() {
@@ -113,24 +179,26 @@ export default function Home() {
     const prev = history[history.length-1]
     setGroupedSuggestions(prev.grouped)
     setWriterEdits(prev.writer)
+    setSpecificEdits(prev.specific || [])
     setHistory(h => h.slice(0,-1))
-    setRedoStack(r => [{ grouped: groupedSuggestions, writer: writerEdits }, ...r])
+    setRedoStack(r => [{ grouped: groupedSuggestions, writer: writerEdits, specific: specificEdits }, ...r])
   }
   function redo() {
     if (redoStack.length === 0) return
     const next = redoStack[0]
     setGroupedSuggestions(next.grouped)
     setWriterEdits(next.writer)
+    setSpecificEdits(next.specific || [])
     setRedoStack(r => r.slice(1))
-    setHistory(h => [...h, { grouped: groupedSuggestions, writer: writerEdits }])
+    setHistory(h => [...h, { grouped: groupedSuggestions, writer: writerEdits, specific: specificEdits }])
   }
-
   // --- Submit ---
   async function handleSubmit() {
     setLoading(true)
     setError('')
     setGroupedSuggestions({})
     setWriterEdits([])
+    setSpecificEdits([])
     setAuthorship({ user: 0, lulu: 0 })
     setSessionLog([])
     try {
@@ -141,9 +209,9 @@ export default function Home() {
         body: JSON.stringify({
           text: plainText,
           editType,
-          mode: "General Edits",
+          mode,
           writerCue,
-          roadmapOnly: true,
+          roadmapOnly: mode === "General Edits",
           editDepth,
           editProfile,
           thresholdOnly
@@ -153,48 +221,49 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || 'Something went wrong.')
       let writerEditGroup = []
       let roadmapGroups = {}
-      ;(data.roadmap || []).forEach(item => {
-        if (item.editType === "Writer's Edit") {
-          writerEditGroup.push({
-            own: item.own || item.recommendation,
-            lulu: item.lulu || item.luluEdit,
-            why: item.why, principles: item.principles, state: 'pending',
-            deepDive: null
-          })
-        } else {
-          if (!roadmapGroups[item.editType]) roadmapGroups[item.editType] = []
-          roadmapGroups[item.editType].push({
-            ...item,
-            state: 'pending',
-            deepDive: null
-          })
-        }
-      })
-      setWriterEdits(writerEditGroup)
-      setGroupedSuggestions(roadmapGroups)
-      setAuthorship({ user: 100, lulu: 0 })
-      pushHistory(roadmapGroups, writerEditGroup)
-      setSessionLog([])
+      if (mode === "General Edits") {
+        (data.roadmap || []).forEach(item => {
+          if (item.editType === "Writer's Edit") {
+            writerEditGroup.push({
+              own: item.own || item.recommendation,
+              lulu: item.lulu || item.luluEdit,
+              why: item.why, principles: item.principles, state: 'pending',
+              deepDive: null
+            })
+          } else {
+            if (!roadmapGroups[item.editType]) roadmapGroups[item.editType] = []
+            roadmapGroups[item.editType].push({
+              ...item,
+              state: 'pending',
+              deepDive: null
+            })
+          }
+        })
+        setWriterEdits(writerEditGroup)
+        setGroupedSuggestions(roadmapGroups)
+        setAuthorship({ user: 100, lulu: 0 })
+        pushHistory(roadmapGroups, writerEditGroup)
+        setSessionLog([])
+      } else if (mode === "Specific Edits") {
+        // Specific Edits array
+        setSpecificEdits((data.suggestions || []).map(s => ({...s, state:'pending'})))
+        setAuthorship({ user: 100, lulu: 0 })
+        pushHistory({}, [])
+        setSessionLog([])
+      }
       setShowEditOptions(false)
-      setSuggestionView('overview')
-      setFocusIndex(0)
-      setExpandedSuggestions({})
-      setDeepDiveContent({})
-      setAskLuluInputs({})
-      setAskLuluLogs({})
-      setDeepDiveLoading({})
+      setActiveEditIdx(null); setActivePanelIdx(null)
+      setFocusSpecificIdx(0)
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
   }
-
-  // --- Accept/Reject/Revise logic with collapse + learning log and focus auto-advance ---
+  // Accept/Reject/Revise logic for General Edits as before
   function logAction(action, detail, contextText = null) {
     let context = null
     if (action === 'Suggestion' || action === 'WriterEdit') {
-      // Try to include meaningful suggestion/revision content
       const sugObj = action === 'WriterEdit'
         ? writerEdits[detail.idx]
         : (groupedSuggestions[detail.editType] || [])[detail.idx]
@@ -214,9 +283,14 @@ export default function Home() {
     }])
   }
   function autoAdvance() {
-    if (suggestionView === 'focus' && suggestionsLength > 1) {
+    if (mode === "General Edits" && suggestionView === 'focus' && suggestionsLength > 1) {
       setTimeout(() => {
         setFocusIndex(i => i < suggestionsLength - 1 ? i + 1 : i)
+      }, 250)
+    }
+    if (mode === "Specific Edits" && specificEdits.length > 1) {
+      setTimeout(() => {
+        setFocusSpecificIdx(i => i < specificEdits.length - 1 ? i + 1 : i)
       }, 250)
     }
   }
@@ -259,22 +333,49 @@ export default function Home() {
     setActiveRevise({ type: null, idx: null, val: '' })
   }
 
-  // --- Edit Type Selectors ---
-  function isChecked(type) {
-    if (type === 'Full Edit') return editType.length === EDIT_TYPES.length - 1
-    return editType.includes(type)
+  // --- Specific Edits: Accept/Reject/Revise ---
+  function acceptSpecific(idx) {
+    pushHistory(groupedSuggestions, writerEdits)
+    setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'accepted'}))
+    setSessionLog(log => [...log, {action:'accept', idx, ts:Date.now()}])
+
+    // UPDATE TEXT with suggestion when accepted
+    setText(prevText => {
+      const s = specificEdits[idx]
+      if (!s || s.start == null || s.end == null) return prevText
+      const before = prevText.slice(0, s.start)
+      const after = prevText.slice(s.end)
+      return before + (s.suggestion || s.revised || "") + after
+    })
+
+    setActiveEditIdx(null); setActivePanelIdx(null)
+    autoAdvance()
   }
-  function toggleEditType(type) {
-    if (type === 'Full Edit') {
-      if (isChecked('Full Edit')) setEditType([])
-      else setEditType(EDIT_TYPES.filter(t => t.type !== 'Full Edit').map(t => t.type))
-      return
-    }
-    setEditType(prev =>
-      prev.includes(type)
-        ? prev.filter(t => t !== type)
-        : [...prev, type]
-    )
+
+  function rejectSpecific(idx) {
+    pushHistory(groupedSuggestions, writerEdits)
+    setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'rejected'}))
+    setSessionLog(log => [...log, {action:'reject', idx, ts:Date.now()}])
+    setActiveEditIdx(null); setActivePanelIdx(null)
+    autoAdvance()
+  }
+
+  function reviseSpecific(idx, revision) {
+    pushHistory(groupedSuggestions, writerEdits)
+    setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'revised', revision}))
+    setSessionLog(log => [...log, {action:'revise', idx, ts:Date.now(), revision}])
+
+    // UPDATE TEXT with revised value
+    setText(prevText => {
+      const s = specificEdits[idx]
+      if (!s || s.start == null || s.end == null) return prevText
+      const before = prevText.slice(0, s.start)
+      const after = prevText.slice(s.end)
+      return before + revision + after
+    })
+
+    setActiveEditIdx(null); setActivePanelIdx(null)
+    autoAdvance()
   }
 
   // --- Deep Dive/Ask Lulu per suggestion (with chat log) ---
@@ -284,7 +385,6 @@ export default function Home() {
       [sKey]: !exp[sKey]
     }))
     if (!expandedSuggestions[sKey]) {
-      // Only load if not loaded yet
       if (!deepDiveContent[sKey]) {
         setDeepDiveLoading(d => ({...d, [sKey]: true}))
         const manuscript = text
@@ -311,12 +411,10 @@ export default function Home() {
     const contextText = askLuluInputs[sKey]
     if (!contextText) return
     setAskLuluInputs(inp => ({ ...inp, [sKey]: "" }))
-    // Add user question to log
     setAskLuluLogs(logs => ({
       ...logs,
       [sKey]: [...(logs[sKey] || []), { who: "user", text: contextText }]
     }))
-    // Call API
     const manuscript = text
     const res = await fetch('/api/ask-lulu', {
       method: 'POST',
@@ -337,7 +435,7 @@ export default function Home() {
     logAction('Ask Lulu', { newState: aiAnswer, revision: contextText })
   }
 
-  // --- Suggestion Card ---
+  // --- Suggestion Card for General Edits ---
   function renderSuggestionCard(sug, sugIdx, groupType) {
     const meta = getEditMeta(groupType || sug.type)
     const sKey = `${sug.isWriter ? 'w' : 's'}_${groupType || sug.type}_${sugIdx}`
@@ -457,34 +555,74 @@ export default function Home() {
       </div>
     )
   }
-
   // --- All edits processed feedback ---
-  const totalSuggestions =
-    writerEdits.length +
+  const allSuggestionsLength = writerEdits.length +
     Object.values(groupedSuggestions).reduce((acc, arr) => acc + arr.length, 0)
+  const totalSuggestions = allSuggestionsLength + (mode === "Specific Edits" ? specificEdits.length : 0)
   const editsProcessed =
     writerEdits.filter(e => ['accepted', 'rejected', 'revised'].includes(e.state)).length +
     Object.values(groupedSuggestions).reduce((acc, arr) =>
       acc + arr.filter(e => ['accepted', 'rejected', 'revised'].includes(e.state)).length, 0
-    )
+    ) +
+    (mode === "Specific Edits"
+      ? specificEdits.filter(e => ['accepted','rejected','revised'].includes(e.state)).length
+      : 0)
   const allDone = totalSuggestions > 0 && editsProcessed === totalSuggestions
-
   // --- Split-panel CSS ---
   const layoutClass = "flex flex-col md:flex-row gap-6"
   const lhsClass = "flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit"
   const rhsClass = "w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit"
+
+  function isChecked(type) {
+  if (type === 'Full Edit') return editType.length === EDIT_TYPES.length - 1
+  return editType.includes(type)
+}
+function toggleEditType(type) {
+  if (type === 'Full Edit') {
+    if (isChecked('Full Edit')) setEditType([])
+    else setEditType(EDIT_TYPES.filter(t => t.type !== 'Full Edit').map(t => t.type))
+    return
+  }
+  setEditType(prev =>
+    prev.includes(type)
+      ? prev.filter(t => t !== type)
+      : [...prev, type]
+  )
+}
 
   // --- UI ---
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold mb-8 text-center text-purple-700">Lulu Mentor App</h1>
-        <div className={layoutClass}>
-          {/* LHS: Manuscript (always visible) */}
-          <div className={lhsClass}>
+        <div className="flex flex-col md:flex-row gap-6">
+          {/* LHS: Manuscript Editor */}
+          <div className="flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit">
             <label className="font-semibold block mb-1 text-lg">Your Manuscript</label>
-            <LuluEditor value={text} setValue={setText} />
-            {!showEditOptions && (
+            {mode === "Specific Edits" && specificEdits.length && showHighlights ? (
+              <div
+                className="border rounded min-h-[14rem] p-3 text-base whitespace-pre-wrap font-serif"
+                style={{outline:'2px solid #a78bfa', position:'relative', minHeight:'300px'}}
+                dangerouslySetInnerHTML={{__html: highlightManuscript(text, specificEdits, activeEditIdx, showHighlights, showNumbers)}}
+              />
+            ) : (
+              <LuluEditor value={text} setValue={setText} />
+            )}
+            {mode === "Specific Edits" && (
+              <div className="flex gap-2 my-2 items-center">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={showHighlights} onChange={e=>setShowHighlights(e.target.checked)} />
+                  Show Suggestions Highlighted
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={showNumbers} onChange={e=>setShowNumbers(e.target.checked)} />
+                  Show Numbered Badges
+                </label>
+                <button className="ml-auto px-3 py-1 bg-gray-200 rounded" onClick={undo}>Undo</button>
+                <button className="px-3 py-1 bg-gray-200 rounded" onClick={redo}>Redo</button>
+              </div>
+            )}
+            {!showEditOptions && mode === "General Edits" && (
               <div className="mt-6 mb-4">
                 <b>Authorship meter:</b>
                 <div className="flex items-center gap-2 mt-1">
@@ -494,8 +632,8 @@ export default function Home() {
               </div>
             )}
           </div>
-          {/* RHS: Edit options, Suggestions (with navigation), Learning Log */}
-          <div className={rhsClass} style={{ minWidth: '24rem' }}>
+          {/* RHS: Options + Suggestion Panel */}
+          <div className="w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit" style={{ minWidth: '24rem' }}>
             {showEditOptions ? (
               <>
                 <label className="font-semibold flex items-center mt-2 mb-1">
@@ -514,7 +652,6 @@ export default function Home() {
                   onBlur={() => setCueFocus(false)}
                   onChange={e => setWriterCue(e.target.value)}
                 />
-
                 <div className="mb-3">
                   <label className="font-semibold block mb-1">
                     Edit Types:
@@ -555,8 +692,7 @@ export default function Home() {
                   <label className="font-semibold block mb-1">Editing Mode:</label>
                   <select className="p-2 border rounded w-full focus:border-purple-400" value={mode} onChange={e => setMode(e.target.value)}>
                     <option>General Edits</option>
-                    <option disabled>Specific Edits (coming soon)</option>
-                    <option disabled>Rewrite (coming soon)</option>
+                    <option>Specific Edits</option>
                   </select>
                 </div>
                 <div className="flex gap-3 mb-3">
@@ -574,74 +710,151 @@ export default function Home() {
                 >
                   Return to Edit Options
                 </button>
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-2xl font-semibold text-purple-800">Suggestions</h2>
-                  <div className="flex gap-1">
-                    <button className={`px-2 py-1 rounded ${suggestionView === 'overview' ? 'bg-purple-200 font-bold' : 'bg-gray-100'}`}
-                      onClick={() => setSuggestionView('overview')}>Overview</button>
-                    <button className={`px-2 py-1 rounded ${suggestionView === 'focus' ? 'bg-purple-200 font-bold' : 'bg-gray-100'}`}
-                      onClick={() => setSuggestionView('focus')}>Focus View</button>
-                  </div>
-                </div>
-                {allDone && (
-                  <div className="mb-4 p-3 bg-green-50 border-l-4 border-green-400 text-green-700 font-semibold rounded">
-                    ✅ All edits processed. Great work!
-                  </div>
-                )}
-                {suggestionView === 'overview' ? (
+                {/* General Edits Panel */}
+                {mode === "General Edits" && (
                   <>
-                    {writerEdits.length > 0 && (
-                      <AccordionSection
-                        title="Writer’s Edit"
-                        icon="👤"
-                        count={writerEdits.length}
-                        defaultOpen
-                      >
-                        {writerEdits.map((item, idx) => renderSuggestionCard({...item, isWriter: true, idx}, idx, "Writer's Edit"))}
-                      </AccordionSection>
-                    )}
-                    {Object.entries(groupedSuggestions).map(([type, arr]) => {
-                      const meta = getEditMeta(type)
-                      return (
-                        <AccordionSection
-                          key={type}
-                          title={type}
-                          icon={meta.icon}
-                          count={arr.length}
-                          defaultOpen={arr.length <= 3}
-                        >
-                          {arr.map((sug, idx) => renderSuggestionCard({...sug, isWriter: false, idx, type}, idx, type))}
-                        </AccordionSection>
-                      )
-                    })}
-                  </>
-                ) : (
-                  <>
-                    {suggestionsLength > 0 ? (
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <b>{focusIndex + 1} of {suggestionsLength}</b>
-                        </div>
-                        {renderSuggestionCard(allSuggestions[focusIndex], focusIndex, allSuggestions[focusIndex].type)}
-                        <div className="flex justify-between mt-3">
-                          <button
-                            disabled={focusIndex === 0}
-                            className="px-3 py-1 bg-purple-100 text-purple-800 rounded disabled:opacity-50"
-                            onClick={() => setFocusIndex(i => Math.max(0, i-1))}
-                          >Prev</button>
-                          <button
-                            disabled={focusIndex === suggestionsLength - 1}
-                            className="px-3 py-1 bg-purple-100 text-purple-800 rounded disabled:opacity-50"
-                            onClick={() => setFocusIndex(i => Math.min(suggestionsLength-1, i+1))}
-                          >Next</button>
-                        </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-2xl font-semibold text-purple-800">Suggestions</h2>
+                      <div className="flex gap-1">
+                        <button className={`px-2 py-1 rounded ${suggestionView === 'overview' ? 'bg-purple-200 font-bold' : 'bg-gray-100'}`}
+                          onClick={() => setSuggestionView('overview')}>Overview</button>
+                        <button className={`px-2 py-1 rounded ${suggestionView === 'focus' ? 'bg-purple-200 font-bold' : 'bg-gray-100'}`}
+                          onClick={() => setSuggestionView('focus')}>Focus View</button>
                       </div>
+                    </div>
+                    {allDone && (
+                      <div className="mb-4 p-3 bg-green-50 border-l-4 border-green-400 text-green-700 font-semibold rounded">
+                        ✅ All edits processed. Great work!
+                      </div>
+                    )}
+                    {suggestionView === 'overview' ? (
+                      <>
+                        {writerEdits.length > 0 && (
+                          <AccordionSection
+                            title="Writer’s Edit"
+                            icon="👤"
+                            count={writerEdits.length}
+                            defaultOpen
+                          >
+                            {writerEdits.map((item, idx) => renderSuggestionCard({...item, isWriter: true, idx}, idx, "Writer's Edit"))}
+                          </AccordionSection>
+                        )}
+                        {Object.entries(groupedSuggestions).map(([type, arr]) => {
+                          const meta = getEditMeta(type)
+                          return (
+                            <AccordionSection
+                              key={type}
+                              title={type}
+                              icon={meta.icon}
+                              count={arr.length}
+                              defaultOpen={arr.length <= 3}
+                            >
+                              {arr.map((sug, idx) => renderSuggestionCard({...sug, isWriter: false, idx, type}, idx, type))}
+                            </AccordionSection>
+                          )
+                        })}
+                      </>
                     ) : (
-                      <div className="mb-4 text-gray-600 italic">No suggestions to display.</div>
+                      <>
+                        {suggestionsLength > 0 ? (
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <b>{focusIndex + 1} of {suggestionsLength}</b>
+                            </div>
+                            {renderSuggestionCard(allSuggestions[focusIndex], focusIndex, allSuggestions[focusIndex].type)}
+                            <div className="flex justify-between mt-3">
+                              <button
+                                disabled={focusIndex === 0}
+                                className="px-3 py-1 bg-purple-100 text-purple-800 rounded disabled:opacity-50"
+                                onClick={() => setFocusIndex(i => Math.max(0, i-1))}
+                              >Prev</button>
+                              <button
+                                disabled={focusIndex === suggestionsLength - 1}
+                                className="px-3 py-1 bg-purple-100 text-purple-800 rounded disabled:opacity-50"
+                                onClick={() => setFocusIndex(i => Math.min(suggestionsLength-1, i+1))}
+                              >Next</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mb-4 text-gray-600 italic">No suggestions to display.</div>
+                        )}
+                      </>
                     )}
                   </>
                 )}
-                {/* Learning Log (Accordion, not "Session") */}
+                {/* Specific Edits Panel */}
+                {mode === "Specific Edits" && (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-2xl font-semibold text-blue-800">Specific Edit Suggestions</h2>
+                      <div className="flex gap-2">
+                        <button className="px-2 py-1 bg-blue-100 rounded" onClick={undo}>Undo</button>
+                        <button className="px-2 py-1 bg-blue-100 rounded" onClick={redo}>Redo</button>
+                      </div>
+                    </div>
+                    <div className="mb-3 flex gap-3">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={showHighlights} onChange={e=>setShowHighlights(e.target.checked)} />
+                        Show Highlights
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={showNumbers} onChange={e=>setShowNumbers(e.target.checked)} />
+                        Number Badges
+                      </label>
+                    </div>
+                    <div>
+                      {specificEdits.map((s, idx) => {
+                        const meta = getEditMeta(s.editType)
+                        return (
+                          <div
+                            key={idx}
+                            ref={el => highlightRefs.current[idx] = el}
+                            className={`mb-3 border-l-4 p-3 cursor-pointer ${meta.color} ${activePanelIdx===idx?'ring-2 ring-black':''}`}
+                            onClick={()=>handlePanelClick(idx)}
+                          >
+                            <div className="flex items-center">
+                              <span className={`mr-2 text-lg ${meta.iconColor}`}>{meta.icon}</span>
+                              <span className="font-semibold">{s.original || text.slice(s.start, s.end)}</span>
+                              <span className="ml-2 bg-gray-200 text-xs rounded px-2 py-0.5">{s.editType}</span>
+                              {showNumbers && <sup className="ml-2 text-xs text-gray-600">{idx+1}</sup>}
+                            </div>
+                            {s.why && <div className="text-xs text-blue-700 italic mb-1">Why: {s.why}</div>}
+                            <div className="flex gap-2 mt-2">
+                              <button className="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs"
+                                disabled={s.state!=="pending"}
+                                onClick={()=>acceptSpecific(idx)}>Accept</button>
+                              <button className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs"
+                                disabled={s.state!=="pending"}
+                                onClick={()=>rejectSpecific(idx)}>Reject</button>
+                              <button className="bg-yellow-400 hover:bg-yellow-500 text-white px-2 py-1 rounded text-xs"
+                                disabled={s.state!=="pending"}
+                                onClick={()=>setActiveEditIdx(idx)}>Revise</button>
+                            </div>
+                            {activeEditIdx===idx && s.state==='pending' && (
+                              <div className="mt-2">
+                                <textarea
+                                  className="w-full p-1 border rounded"
+                                  rows={2}
+                                  defaultValue={s.revised || s.suggestion || ''}
+                                  onBlur={e=>reviseSpecific(idx, e.target.value)}
+                                />
+                              </div>
+                            )}
+                            {["accepted","rejected","revised"].includes(s.state) && (
+                              <span className="text-xs ml-3">
+                                {s.state.charAt(0).toUpperCase()+s.state.slice(1)}
+                                <button className="ml-2 text-xs text-purple-800 underline"
+                                  onClick={()=>setSpecificEdits(edits=>edits.map((e,i)=>i===idx?{...e,state:'pending'}:e))}
+                                >Undo</button>
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+                {/* Learning Log */}
                 <div className="mt-8 rounded bg-purple-50 border border-purple-200">
                   <div className="flex items-center justify-between p-2 cursor-pointer" onClick={()=>setLogAccordion(a=>!a)}>
                     <h3 className="font-bold text-purple-700 mb-0">🪄 Learning Log</h3>
