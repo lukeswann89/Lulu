@@ -1,8 +1,10 @@
+"use client";
+import dynamic from 'next/dynamic';
 import React, { useState, useRef, useEffect } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, Extension } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Highlight from "@tiptap/extension-highlight";
-import { Plugin } from "prosemirror-state";
+import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { v4 as uuidv4 } from "uuid";
 
@@ -37,11 +39,148 @@ const initialSuggestions = [
   }
 ];
 
-export default function LuluTipTap({
+function findAllPositions(text, searchStr) {
+  const positions = [];
+  let lastIndex = 0;
+  while (true) {
+    const index = text.indexOf(searchStr, lastIndex);
+    if (index === -1) break;
+    positions.push({
+      from: index,
+      to: index + searchStr.length
+    });
+    lastIndex = index + 1; // Allow overlapping matches
+  }
+  return positions;
+}
+
+function realignSuggestions(text, suggestions) {
+  console.log("Realigning suggestions for text:", text);
+  console.log("Current suggestions before realign:", suggestions);
+
+  // Create a map of all positions for each original text
+  const positionMap = new Map();
+  suggestions.forEach(sug => {
+    if (sug.state === 'pending') {
+      positionMap.set(sug.id, findAllPositions(text, sug.original));
+    }
+  });
+
+  console.log("Found positions for pending suggestions:", Object.fromEntries(positionMap));
+
+  // For each pending suggestion, find best position match
+  return suggestions.map(sug => {
+    if (sug.state !== 'pending') return sug;
+
+    const positions = positionMap.get(sug.id) || [];
+    if (positions.length === 0) {
+      console.log(`No positions found for suggestion ${sug.id} ("${sug.original}")`);
+      return {
+        ...sug,
+        alignError: true,
+        errorMessage: `Original text "${sug.original}" not found in current document`
+      };
+    }
+
+    // Find position closest to previous from/to
+    let bestPosition = positions[0];
+    let minDistance = Infinity;
+    
+    if (typeof sug.from === 'number') {
+      positions.forEach(pos => {
+        const distance = Math.abs(pos.from - sug.from);
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestPosition = pos;
+        }
+      });
+    }
+
+    console.log(`Selected position for "${sug.original}":`, bestPosition);
+    return {
+      ...sug,
+      from: bestPosition.from,
+      to: bestPosition.to,
+      alignError: false,
+      errorMessage: null
+    };
+  });
+}
+
+const SuggestionsHighlightExtension = Extension.create({
+  name: 'suggestionsHighlight',
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('suggestionsHighlight'),
+        props: {
+          decorations: (state) => {
+            const decorations = [];
+            const suggestions = this.editor.view.props.attributes?.suggestions || [];
+            
+            suggestions.forEach((suggestion) => {
+              if (suggestion.state === 'pending') {
+                const text = state.doc.textContent;
+                
+                // Find all possible positions
+                const positions = findAllPositions(text, suggestion.original);
+                if (positions.length === 0) return;
+
+                // Find best position match
+                let bestPosition = positions[0];
+                if (typeof suggestion.from === 'number') {
+                  let minDistance = Math.abs(positions[0].from - suggestion.from);
+                  positions.forEach(pos => {
+                    const distance = Math.abs(pos.from - suggestion.from);
+                    if (distance < minDistance) {
+                      minDistance = distance;
+                      bestPosition = pos;
+                    }
+                  });
+                }
+
+                // Create decoration at best position
+                let pos = 0;
+                state.doc.descendants((node, nodePos) => {
+                  if (node.isText) {
+                    const index = node.text.indexOf(suggestion.original, 
+                      pos === nodePos ? bestPosition.from : 0);
+                    if (index !== -1) {
+                      const start = nodePos + index;
+                      const end = start + suggestion.original.length;
+                      decorations.push(
+                        Decoration.inline(start, end, {
+                          class: `suggestion-highlight-${suggestion.id}`,
+                          style: `background-color: ${suggestion.color || '#ffe29b'}; 
+                                 border-radius: 4px; 
+                                 padding: 2px;
+                                 ${suggestion.alignError ? 'opacity: 0.5;' : ''}`
+                        })
+                      );
+                      return false;
+                    }
+                  }
+                  pos = nodePos;
+                });
+              }
+            });
+
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+      }),
+    ];
+  },
+});
+
+// Wrap the component for SSR
+const LuluTipTapComponent = ({
   initialText = defaultText,
-  readOnly = false
-}) {
-  const [allSuggestions, setAllSuggestions] = useState(initialSuggestions);
+  readOnly = false,
+  suggestions = initialSuggestions
+}) => {
+  const [allSuggestions, setAllSuggestions] = useState(suggestions);
   const [history, setHistory] = useState([]);
   const cardRefs = useRef({});
 
@@ -49,94 +188,205 @@ export default function LuluTipTap({
     extensions: [
       StarterKit,
       Highlight,
-      new Plugin({
-        props: {
-          decorations: (state) => {
-            const decos = [];
-            allSuggestions.forEach(s => {
-              if (!s || s.from == null || s.to == null || s.state !== "pending") return;
-              decos.push(
-                Decoration.inline(s.from, s.to, {
-                  class: "lulu-highlight",
-                  "data-sug": s.id
-                })
-              );
-            });
-            return DecorationSet.create(state.doc, decos);
-          }
-        }
-      })
+      SuggestionsHighlightExtension
     ],
     content: initialText,
-    editable: !readOnly
+    editable: !readOnly,
+    attributes: {
+      suggestions: allSuggestions
+    },
+    // Fix SSR hydration
+    immediatelyRender: false
   });
 
+  // Update editor attributes when suggestions change
+  useEffect(() => {
+    if (editor) {
+      console.log("Updating editor with new suggestions:", allSuggestions);
+      editor.view.setProps({
+        attributes: {
+          suggestions: allSuggestions
+        }
+      });
+      editor.view.dispatch(editor.view.state.tr);
+    }
+  }, [allSuggestions, editor]);
+
+  // === Inject highlight CSS on mount ===
   useEffect(() => {
     if (typeof window !== "undefined" && !document.getElementById("luluHighlightStyle")) {
       const style = document.createElement("style");
       style.id = "luluHighlightStyle";
-      style.innerHTML = `.lulu-highlight { background: #fde68a; border-radius: 3px; padding: 0 2px; cursor: pointer; }`;
+      style.innerHTML = `
+        .lulu-highlight { background: #fde68a; border-radius: 3px; padding: 0 2px; cursor: pointer; }
+        ${allSuggestions.map(s => `
+          .suggestion-highlight-${s.id} { 
+            background-color: ${s.color || '#ffe29b'}; 
+            border-radius: 4px; 
+            padding: 2px;
+            transition: background-color 0.2s;
+          }
+        `).join('\n')}
+      `;
       document.head.appendChild(style);
     }
-  }, []);
+  }, [allSuggestions]);
 
-  function realignSuggestions(text, prev) {
-    const used = [];
-    return prev.map(sug => {
-      if (sug.state !== 'pending') return sug;
-      const idx = text.indexOf(sug.original);
-      if (idx === -1 || used.includes(idx)) return { ...sug, alignError: true };
-      used.push(idx);
-      return { ...sug, from: idx, to: idx + sug.original.length, alignError: false };
+  function handleAccept(sugId) {
+    console.log("Accepting suggestion:", sugId);
+    const sug = allSuggestions.find(s => s.id === sugId);
+    if (!sug || sug.state !== "pending" || !editor) return;
+
+    const currentText = editor.getText();
+    console.log("Current text before accept:", currentText);
+    
+    setHistory(h => [...h, { 
+      text: currentText, 
+      suggestions: [...allSuggestions] 
+    }]);
+
+    // Find all positions of the original text
+    const positions = findAllPositions(currentText, sug.original);
+    if (positions.length === 0) {
+      console.error("Could not find original text to replace:", sug.original);
+      return;
+    }
+
+    // Find best position match
+    let targetPos = positions[0];
+    if (typeof sug.from === 'number') {
+      let minDistance = Math.abs(positions[0].from - sug.from);
+      positions.forEach(pos => {
+        const distance = Math.abs(pos.from - sug.from);
+        if (distance < minDistance) {
+          minDistance = distance;
+          targetPos = pos;
+        }
+      });
+    }
+
+    const newText = currentText.slice(0, targetPos.from) + 
+                   sug.suggestion + 
+                   currentText.slice(targetPos.to);
+    
+    console.log("New text after replacement:", newText);
+    editor.commands.setContent(newText);
+
+    setAllSuggestions(prev => {
+      // First update only this suggestion's state
+      const updated = prev.map(s => 
+        s.id === sugId ? { ...s, state: "accepted" } : s
+      );
+      
+      // Then realign all remaining pending suggestions
+      return realignSuggestions(newText, updated);
     });
   }
 
-  function handleAccept(sugId) {
+  function handleReject(sugId) {
+    console.log("Rejecting suggestion:", sugId);
     const sug = allSuggestions.find(s => s.id === sugId);
     if (!sug || sug.state !== "pending" || !editor) return;
-    const fullText = editor.getText();
-    const needsQuote = sug.original.trim().startsWith('"') && !sug.contextualInsert.trim().startsWith('"');
-    const contextual = needsQuote ? `"${sug.contextualInsert}"` : sug.contextualInsert;
-    const updated = fullText.slice(0, sug.from) + contextual + fullText.slice(sug.to);
-    editor.commands.setContent(updated);
-    const realigned = realignSuggestions(updated, allSuggestions.map(s => s.id === sugId ? { ...s, state: "accepted" } : s));
-    setHistory(h => [...h, { text: fullText, suggestions: allSuggestions }]);
-    setAllSuggestions(realigned);
-    editor.view.dispatch(editor.view.state.tr);
-  }
 
-  function handleReject(sugId) {
-    const fullText = editor.getText();
-    const updated = allSuggestions.map(s => s.id === sugId ? { ...s, state: "rejected" } : s);
-    setHistory(h => [...h, { text: fullText, suggestions: allSuggestions }]);
-    setAllSuggestions(updated);
-    editor.view.dispatch(editor.view.state.tr);
+    const currentText = editor.getText();
+    setHistory(h => [...h, { 
+      text: currentText, 
+      suggestions: [...allSuggestions] 
+    }]);
+
+    setAllSuggestions(prev => {
+      const updated = prev.map(s => s.id === sugId ? { ...s, state: "rejected" } : s);
+      console.log("Suggestions after reject:", updated);
+      return updated;
+    });
   }
 
   function handleRevise(sugId) {
+    console.log("Revising suggestion:", sugId);
     const sug = allSuggestions.find(s => s.id === sugId);
-    if (!sug || sug.state !== "pending") return;
-    const newVal = prompt("Revise full sentence:", sug.contextualInsert);
+    if (!sug || sug.state !== "pending" || !editor) return;
+
+    const newVal = prompt("Revise suggestion:", sug.suggestion);
     if (!newVal) return;
-    const fullText = editor.getText();
-    const updated = allSuggestions.map(s => s.id === sugId ? { ...s, contextualInsert: newVal, state: "revised" } : s);
-    setHistory(h => [...h, { text: fullText, suggestions: allSuggestions }]);
-    setAllSuggestions(updated);
-    editor.view.dispatch(editor.view.state.tr);
+
+    const currentText = editor.getText();
+    console.log("Current text before revise:", currentText);
+    
+    setHistory(h => [...h, { 
+      text: currentText, 
+      suggestions: [...allSuggestions] 
+    }]);
+
+    // Find all positions of the original text
+    const positions = findAllPositions(currentText, sug.original);
+    if (positions.length === 0) {
+      console.error("Could not find original text to revise:", sug.original);
+      return;
+    }
+
+    // Find best position match
+    let targetPos = positions[0];
+    if (typeof sug.from === 'number') {
+      let minDistance = Math.abs(positions[0].from - sug.from);
+      positions.forEach(pos => {
+        const distance = Math.abs(pos.from - sug.from);
+        if (distance < minDistance) {
+          minDistance = distance;
+          targetPos = pos;
+        }
+      });
+    }
+
+    const newText = currentText.slice(0, targetPos.from) + 
+                   newVal + 
+                   currentText.slice(targetPos.to);
+    
+    console.log("New text after revision:", newText);
+    editor.commands.setContent(newText);
+
+    setAllSuggestions(prev => {
+      // First update only this suggestion
+      const updated = prev.map(s => 
+        s.id === sugId ? { 
+          ...s, 
+          state: "revised", 
+          suggestion: newVal 
+        } : s
+      );
+      
+      // Then realign all remaining pending suggestions
+      return realignSuggestions(newText, updated);
+    });
+  }
+
+  function handleRefreshHighlights() {
+    console.log("Manually refreshing highlights");
+    const currentText = editor.getText();
+    setAllSuggestions(prev => realignSuggestions(currentText, prev));
   }
 
   function handleUndo() {
-    if (!history.length) return;
+    if (!history.length || !editor) return;
+    
     const last = history[history.length - 1];
-    setAllSuggestions(last.suggestions);
     editor.commands.setContent(last.text);
+    setAllSuggestions(last.suggestions);
     setHistory(h => h.slice(0, -1));
-    editor.view.dispatch(editor.view.state.tr);
   }
 
   function handleCardUndo(sugId) {
-    setAllSuggestions(sugs => sugs.map(s => s.id === sugId ? { ...s, state: "pending" } : s));
-    editor.view.dispatch(editor.view.state.tr);
+    if (!editor) return;
+
+    // Save current state to history
+    const currentText = editor.getText();
+    setHistory(h => [...h, { 
+      text: currentText, 
+      suggestions: [...allSuggestions] 
+    }]);
+    
+    setAllSuggestions(prev => 
+      prev.map(s => s.id === sugId ? { ...s, state: "pending" } : s)
+    );
   }
 
   return (
@@ -144,60 +394,146 @@ export default function LuluTipTap({
       <h2 style={{ color: "#9333ea", fontWeight: 800, fontSize: 28, marginBottom: 24 }}>
         Lulu TipTap Editor (Experimental)
       </h2>
-
       <div style={{ border: "1.5px solid #a78bfa", borderRadius: 8, padding: 12, marginBottom: 16, background: "#fff" }}>
         <EditorContent editor={editor} />
       </div>
-
-      <button onClick={handleUndo} style={{ background: "#a78bfa", color: "white", padding: "6px 16px", borderRadius: 6, fontWeight: 600, marginBottom: 20 }}>Undo</button>
-
-      <h3 style={{ marginTop: 0, color: "#2563eb" }}>Specific Edit Suggestions</h3>
-      {allSuggestions.map((s, idx) => (
-        <div
-          key={s.id}
-          ref={el => cardRefs.current[s.id] = el}
-          style={{
-            background: s.color || "#fef3c7",
-            border: "2px solid #fcd34d",
-            borderRadius: 8,
-            padding: 14,
-            marginBottom: 12,
-            position: "relative",
-            opacity: s.state === "pending" ? 1 : 0.6
+      <div style={{ marginBottom: 20, display: 'flex', gap: '10px' }}>
+        <button 
+          onClick={handleUndo} 
+          style={{ 
+            background: "#a78bfa", 
+            color: "white", 
+            padding: "6px 16px", 
+            borderRadius: 6, 
+            fontWeight: 600,
+            border: 'none'
           }}
         >
-          <div style={{
-            position: "absolute",
-            top: 12,
-            right: 16,
-            fontSize: 16,
-            color: "#a16207",
-            background: "#fde68a",
-            borderRadius: 7,
-            padding: "0 7px",
-            fontWeight: 700
-          }}>#{idx + 1}</div>
+          Undo
+        </button>
+        <button 
+          onClick={handleRefreshHighlights}
+          style={{ 
+            background: "#60a5fa", 
+            color: "white", 
+            padding: "6px 16px", 
+            borderRadius: 6, 
+            fontWeight: 600,
+            border: 'none'
+          }}
+        >
+          Refresh Highlights
+        </button>
+      </div>
+      <h3 style={{ marginTop: 0, color: "#2563eb" }}>Specific Edit Suggestions</h3>
+      {allSuggestions.map((s, idx) => {
+        const buttonStyles = {
+          base: {
+            padding: "2px 14px",
+            borderRadius: 4,
+            border: "none",
+            fontWeight: 600,
+            marginRight: 10
+          },
+          accept: {
+            background: s.alignError ? "#d1d5db" : "#22c55e",
+            color: "white",
+            cursor: s.alignError ? "not-allowed" : "pointer"
+          },
+          reject: {
+            background: "#ef4444",
+            color: "white"
+          },
+          revise: {
+            background: s.alignError ? "#d1d5db" : "#facc15",
+            color: "#1e293b",
+            cursor: s.alignError ? "not-allowed" : "pointer"
+          },
+          undo: {
+            background: "#a78bfa",
+            color: "white",
+            marginTop: 8
+          }
+        };
 
-          {s.state === "pending" ? (
-            <>
-              <div><b>Original:</b> <span style={{ color: "#991b1b" }}>{s.original}</span></div>
-              <div><b>Suggestion:</b> <span style={{ color: "#2563eb" }}>{s.suggestion}</span></div>
-              <div><b>Why:</b> <span style={{ color: "#059669" }}>{s.why}</span></div>
-              <div style={{ marginTop: 8 }}>
-                <button onClick={() => handleAccept(s.id)} style={{ marginRight: 10, background: "#22c55e", color: "white", padding: "2px 14px", borderRadius: 4, border: "none", fontWeight: 600 }}>Accept</button>
-                <button onClick={() => handleReject(s.id)} style={{ marginRight: 10, background: "#ef4444", color: "white", padding: "2px 14px", borderRadius: 4, border: "none", fontWeight: 600 }}>Reject</button>
-                <button onClick={() => handleRevise(s.id)} style={{ background: "#facc15", color: "#1e293b", padding: "2px 14px", borderRadius: 4, border: "none", fontWeight: 600 }}>Revise</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div><b>[{s.state.toUpperCase()}]</b> Original: <span style={{ color: "#991b1b" }}>{s.original}</span></div>
-              <div>Suggestion: <span style={{ color: "#2563eb" }}>{s.suggestion}</span></div>
-              <button onClick={() => handleCardUndo(s.id)} style={{ marginTop: 8, background: "#a78bfa", color: "white", padding: "2px 10px", borderRadius: 4, fontWeight: 600, border: "none" }}>Undo</button>
-            </>
-          )}
-        </div>
-      ))}
+        return (
+          <div
+            key={s.id}
+            ref={el => cardRefs.current[s.id] = el}
+            style={{
+              background: s.color || "#fef3c7",
+              border: "2px solid #fcd34d",
+              borderRadius: 8,
+              padding: 14,
+              marginBottom: 12,
+              position: "relative",
+              opacity: s.alignError ? 0.7 : 1
+            }}
+          >
+            <div style={{
+              position: "absolute",
+              top: 12,
+              right: 16,
+              fontSize: 16,
+              color: "#a16207",
+              background: "#fde68a",
+              borderRadius: 7,
+              padding: "0 7px",
+              fontWeight: 700
+            }}>#{idx + 1}</div>
+            {s.state === "pending" ? (
+              <>
+                <div><b>Original:</b> <span style={{ color: "#991b1b" }}>{s.original}</span></div>
+                <div><b>Suggestion:</b> <span style={{ color: "#2563eb" }}>{s.suggestion}</span></div>
+                <div><b>Why:</b> <span style={{ color: "#059669" }}>{s.why}</span></div>
+                {s.alignError && (
+                  <div style={{ color: "#dc2626", marginTop: 4, fontSize: 14 }}>
+                    {s.errorMessage || "Cannot find original text in current document"}
+                  </div>
+                )}
+                <div style={{ marginTop: 8, display: 'flex', gap: '10px' }}>
+                  <button 
+                    onClick={() => handleAccept(s.id)} 
+                    disabled={s.alignError}
+                    style={{ ...buttonStyles.base, ...buttonStyles.accept }}
+                  >
+                    Accept
+                  </button>
+                  <button 
+                    onClick={() => handleReject(s.id)} 
+                    style={{ ...buttonStyles.base, ...buttonStyles.reject }}
+                  >
+                    Reject
+                  </button>
+                  <button 
+                    onClick={() => handleRevise(s.id)} 
+                    disabled={s.alignError}
+                    style={{ ...buttonStyles.base, ...buttonStyles.revise }}
+                  >
+                    Revise
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div><b>[{s.state.toUpperCase()}]</b> Original: <span style={{ color: "#991b1b" }}>{s.original}</span></div>
+                <div>Suggestion: <span style={{ color: "#2563eb" }}>{s.suggestion}</span></div>
+                <button 
+                  onClick={() => handleCardUndo(s.id)} 
+                  style={{ ...buttonStyles.base, ...buttonStyles.undo }}
+                >
+                  Undo
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
-}
+};
+
+// Export a dynamic component with SSR disabled
+export default dynamic(() => Promise.resolve(LuluTipTapComponent), {
+  ssr: false
+});

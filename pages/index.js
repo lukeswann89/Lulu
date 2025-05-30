@@ -1,9 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-
 // DYNAMIC MANUSCRIPT EDITOR
 const LuluEditor = dynamic(() => import('../components/LuluEditor'), { ssr: false })
-
 // --- Edit Types Config ---
 const EDIT_TYPES = [
   { type: 'Full Edit', icon: '🪄', help: "A comprehensive edit across all types.", color: 'bg-purple-50', iconColor: 'text-purple-500', hl: 'ring-purple-400' },
@@ -15,7 +13,6 @@ const EDIT_TYPES = [
 ]
 const EDIT_DEPTHS = ['Light', 'Pro', 'Intensive']
 const PROFILES = ['Voice', 'Professional', 'Publisher: Penguin', 'Reader: YA', 'Creative']
-
 const EDIT_TYPE_TOOLTIP =
 `🪄 Full Edit: A comprehensive edit across all types.
 🖼️ Developmental: Big picture—plot, characters, theme.
@@ -23,11 +20,9 @@ const EDIT_TYPE_TOOLTIP =
 📜 Line: Sentence clarity, word choice.
 🔍 Copy: Grammar, consistency, repetition.
 🩹 Proof: Typos, formatting, last details.`
-
 function getEditMeta(type) {
   return EDIT_TYPES.find(e => e.type === type) || EDIT_TYPES[0]
 }
-
 // --- UI Components ---
 function Tooltip({ text }) {
   const [show, setShow] = useState(false)
@@ -60,7 +55,6 @@ function AccordionSection({ title, icon, count, children, defaultOpen }) {
     </div>
   )
 }
-
 // --- Highlight helpers for Specific Edits ---
 function highlightManuscript(text, specificEdits, activeIdx, showHighlights, showNumbers) {
   if (!showHighlights || !specificEdits?.length) return text
@@ -135,14 +129,12 @@ export default function Home() {
   const [activePanelIdx, setActivePanelIdx] = useState(null)
   const [focusSpecificIdx, setFocusSpecificIdx] = useState(0)
   const highlightRefs = useRef({})
-
   // Panel scroll and highlight logic for Specific Edits
   useEffect(() => {
     if (mode === "Specific Edits" && activeEditIdx != null && highlightRefs.current && highlightRefs.current[activeEditIdx]) {
       highlightRefs.current[activeEditIdx].scrollIntoView({behavior:'smooth', block:'center'})
     }
   }, [activeEditIdx, mode])
-
   useEffect(() => {
     if (mode !== "Specific Edits" || !showHighlights) return
     const clickHandler = e => {
@@ -159,7 +151,6 @@ export default function Home() {
     document.addEventListener('click', clickHandler)
     return () => document.removeEventListener('click', clickHandler)
   }, [showHighlights, mode])
-
   function handlePanelClick(idx) {
     setActiveEditIdx(idx)
     setActivePanelIdx(idx)
@@ -168,7 +159,6 @@ export default function Home() {
         highlightRefs.current[idx].scrollIntoView({behavior:'smooth', block:'center'})
     }, 100)()
   }
-
   // --- History logic ---
   function pushHistory(suggestions, writer) {
     setHistory(h => [...h, { grouped: suggestions, writer, specific: specificEdits }])
@@ -332,13 +322,11 @@ export default function Home() {
   function cancelRevise() {
     setActiveRevise({ type: null, idx: null, val: '' })
   }
-
   // --- Specific Edits: Accept/Reject/Revise ---
   function acceptSpecific(idx) {
     pushHistory(groupedSuggestions, writerEdits)
     setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'accepted'}))
     setSessionLog(log => [...log, {action:'accept', idx, ts:Date.now()}])
-
     // UPDATE TEXT with suggestion when accepted
     setText(prevText => {
       const s = specificEdits[idx]
@@ -347,11 +335,9 @@ export default function Home() {
       const after = prevText.slice(s.end)
       return before + (s.suggestion || s.revised || "") + after
     })
-
     setActiveEditIdx(null); setActivePanelIdx(null)
     autoAdvance()
   }
-
   function rejectSpecific(idx) {
     pushHistory(groupedSuggestions, writerEdits)
     setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'rejected'}))
@@ -359,12 +345,10 @@ export default function Home() {
     setActiveEditIdx(null); setActivePanelIdx(null)
     autoAdvance()
   }
-
   function reviseSpecific(idx, revision) {
     pushHistory(groupedSuggestions, writerEdits)
     setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'revised', revision}))
     setSessionLog(log => [...log, {action:'revise', idx, ts:Date.now(), revision}])
-
     // UPDATE TEXT with revised value
     setText(prevText => {
       const s = specificEdits[idx]
@@ -373,11 +357,9 @@ export default function Home() {
       const after = prevText.slice(s.end)
       return before + revision + after
     })
-
     setActiveEditIdx(null); setActivePanelIdx(null)
     autoAdvance()
   }
-
   // --- Deep Dive/Ask Lulu per suggestion (with chat log) ---
   async function handleToggleDeepDive(sKey, sug, groupType) {
     setExpandedSuggestions(exp => ({
@@ -434,7 +416,6 @@ export default function Home() {
     }))
     logAction('Ask Lulu', { newState: aiAnswer, revision: contextText })
   }
-
   // --- Suggestion Card for General Edits ---
   function renderSuggestionCard(sug, sugIdx, groupType) {
     const meta = getEditMeta(groupType || sug.type)
@@ -572,7 +553,6 @@ export default function Home() {
   const layoutClass = "flex flex-col md:flex-row gap-6"
   const lhsClass = "flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit"
   const rhsClass = "w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit"
-
   function isChecked(type) {
   if (type === 'Full Edit') return editType.length === EDIT_TYPES.length - 1
   return editType.includes(type)
@@ -589,7 +569,6 @@ function toggleEditType(type) {
       : [...prev, type]
   )
 }
-
   // --- UI ---
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-8">
@@ -888,3 +867,4 @@ function toggleEditType(type) {
     </div>
   )
 }
+
