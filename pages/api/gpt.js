@@ -29,62 +29,6 @@ export default async function handler(req, res) {
   if (!text || !editType || !mode) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
-  
-if (mode === 'Specific Edits') {
-  return res.status(200).json({
-    suggestions: [
-      {
-        editType: "Line",
-        original: "Please speak to me,",
-        suggestion: "Could you please speak to me?",
-        start: 0,
-        end: 18,
-        why: "Makes it more polite.",
-        principles: ["Clarity"],
-        state: "pending"
-      },
-      {
-        editType: "Proof",
-        original: "their mum's",
-        suggestion: "her mother's",
-        start: 420,
-        end: 430,
-        why: "Consistency in possessive.",
-        principles: ["Consistency"],
-        state: "pending"
-      }
-    ]
-  });
-}
-
-  // *** MOCK BLOCK FOR SPECIFIC EDITS TESTING ***
-  if (mode === "Specific Edits") {
-    return res.status(200).json({
-      suggestions: [
-        {
-          start: 0,
-          end: 6,
-          editType: "Line",
-          original: text.slice(0, 6),
-          suggestion: "Kindly",
-          why: "Makes it more polite.",
-          principles: ["Politeness"],
-          state: "pending"
-        },
-        {
-          start: 34,
-          end: 40,
-          editType: "Proof",
-          original: text.slice(34, 40),
-          suggestion: "Sylvia",
-          why: "Corrects the name.",
-          principles: ["Accuracy"],
-          state: "pending"
-        }
-      ]
-    });
-  }
-  // *** END MOCK BLOCK ***
 
   const editArray = Array.isArray(editType) ? editType : [editType];
   const typeList = editArray.join(', ');
@@ -101,23 +45,74 @@ if (mode === 'Specific Edits') {
   let roadmapTag = roadmapOnly || mode === 'General Edits' ? 'List proposed changes only. DO NOT revise the text.' : '';
   let depthNote = editDepth ? `Apply edits at a ${editDepth.toLowerCase()} level of intensity.` : '';
 
-  const inlineHint = mode === 'Specific Edits'
-    ? 'For each suggestion, in addition to editType, recommendation, etc., include either the exact "original" text, OR { "start": offset, "end": offset } referencing the matching span of text in the input.' : '';
-
   const chunks = chunkText(text);
   const rawOutputs = [];
   const failedChunks = [];
 
   try {
     for (const chunk of chunks) {
-      // Compose the prompt, including inline reference for Specific Edits
-      const prompt = `${prefix}
+      let prompt = '';
+
+      if (mode === 'Specific Edits') {
+        // --- WORLD-CLASS SPECIFIC EDITS PROMPT ---
+        prompt = `
+You are Lulu, an esteemed senior editor at a prestigious literary publishing house, renowned for meticulously refining manuscripts into critically acclaimed, best-selling young adult novels. Your task is to generate specific, high-quality edits across all essential editorial levels—developmental, structural, line, copy, and proofreading—to elevate the manuscript to its highest literary potential.
+
+When providing edits, strictly adhere to the following guidelines, adjusting the number and depth of edits according to the manuscript's needs:
+
+### Editing Types & Standards:
+
+**Developmental Edits (Core Narrative Refinement):**
+- Suggest edits enhancing character arcs, plot coherence, pacing, emotional resonance, and thematic depth.
+- Provide substantial developmental edits only where significantly impactful improvements are needed, without overwhelming the narrative.
+
+**Structural Edits (Narrative Flow & Organization):**
+- Recommend improvements to chapter sequencing, scene transitions, and narrative flow.
+- Suggest structural edits to ensure coherence, readability, and narrative integrity, proportional to the manuscript's requirements.
+
+**Line Edits (Stylistic Precision):**
+- Offer refinements to sentence structure, voice, tone, clarity, rhythm, and stylistic elegance.
+- Suggest line edits selectively, enhancing literary quality while preserving the author’s distinct voice, based on the manuscript’s level of stylistic polish.
+
+**Copy Edits (Textual Accuracy):**
+- Correct grammatical, syntactical, punctuation errors, and consistency issues.
+- Provide copy edits to ensure textual accuracy and clarity, scaling edits to match the manuscript's degree of textual precision.
+
+**Proofreading (Final Polish):**
+- Identify and correct typos, spelling mistakes, formatting inconsistencies, and minor textual issues.
+- Apply proofreading edits comprehensively to ensure professional polish, based on the manuscript’s existing state.
+
+### How to Present Edits:
+
+For each edit:
+- Clearly present *Original* text alongside the Suggested Revision.
+- Provide succinct yet insightful *Justifications* grounded in literary standards, market appeal, or reader psychology.
+- Maintain the author’s voice, enhancing rather than overriding.
+
+${writerCue ? "The author has shared these notes for editorial consideration: " + writerCue : ""}
+
+Manuscript to edit:
+${chunk}
+
+Please output an array of edits as JSON in the following format:
+[
+  {
+    "editType": "Developmental" | "Structural" | "Line" | "Copy" | "Proof",
+    "original": "...",
+    "suggestion": "...",
+    "why": "..."
+  }
+]
+Only include necessary and high-value edits, according to the manuscript's needs.
+        `;
+      } else {
+        // --- General Edits & Other Modes (legacy prompt) ---
+        prompt = `${prefix}
 ${cuePrompt}
 ${depthNote}
 Editing types: ${typeList}
 ${thresholdPrompt}
 ${roadmapTag}
-${inlineHint}
 Provide all output as a JSON array.
 Writer's Editing Notes (if any) should be the first group, as:
 { "editType": "Writer's Edit", "own": "Original note", "lulu": "Your rewritten/improved version", "why": "Why is your version stronger?", "principles": ["Principle1", "Principle2"] }
@@ -127,10 +122,10 @@ For all other suggestions, each item must contain:
 - "priority" (High, Medium, Low)
 - "why" (brief justification)
 - "principles" (array of 1–2 principles)
-${mode === 'Specific Edits' ? '- "original": the exact text span, and/or "start"/"end" offsets if possible.' : ''}
 Return ONLY a valid JSON array, no other commentary.
 Text:
 ${chunk}`;
+      }
 
       const completion = await openai.chat.completions.create({
         model: model || 'gpt-4o',
@@ -144,7 +139,6 @@ ${chunk}`;
       rawOutputs.push(result);
     }
 
-    // Parse and flatten all roadmap items
     const parsed = [];
     for (const [i, raw] of rawOutputs.entries()) {
       try {
@@ -156,10 +150,11 @@ ${chunk}`;
       }
     }
 
-    // Mark up editType for frontend multi-layer highlighting (Dev/Line/Proof, etc.)
-    // Each suggestion's "editType" field should be used by the UI for coloring and badges.
-
-    return res.status(200).json({ roadmap: parsed, failedChunks });
+    return res.status(200).json({
+      roadmap: mode === 'General Edits' ? parsed : undefined,
+      suggestions: mode === 'Specific Edits' ? parsed : undefined,
+      failedChunks
+    });
 
   } catch (err) {
     console.error('GPT error:', err);

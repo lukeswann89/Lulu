@@ -1,0 +1,462 @@
+import { useState, useRef, useEffect } from 'react'
+import dynamic from 'next/dynamic'
+
+// Import existing components
+import WriterCue from '../components/WriterCue'
+import GeneralEditsPanel from '../components/GeneralEditsPanel'
+import SpecificEditsPanel from '../components/SpecificEditsPanel'
+import EditRoadmap from '../components/EditRoadmap'
+import SuggestionPanel from '../components/SuggestionPanel'
+import LearningLog from '../components/LearningLog'
+import SuggestionCard from '../components/SuggestionCard'
+
+// Import utilities
+import { findAllPositions, realignSuggestions } from '../utils/suggestionUtils'
+import UndoManager from '../utils/undoManager'
+
+// Dynamic imports for editor components
+const LuluEditor = dynamic(() => import('../components/LuluEditor'), { ssr: false })
+const LuluTipTap = dynamic(() => import('../components/LuluTipTap'), { ssr: false })
+
+// --- Edit Types Config ---
+const EDIT_TYPES = [
+  { type: 'Full Edit', icon: '🪄', help: "A comprehensive edit across all types.", color: 'bg-purple-50', iconColor: 'text-purple-500', hl: 'ring-purple-400' },
+  { type: 'Developmental', icon: '🖼️', help: "Big picture: plot, characters, theme.", color: 'bg-blue-50', iconColor: 'text-blue-400', hl: 'ring-blue-400' },
+  { type: 'Structural', icon: '🪜', help: "Scene/chapter order, pacing, flow.", color: 'bg-green-50', iconColor: 'text-green-400', hl: 'ring-green-400' },
+  { type: 'Line', icon: '📜', help: "Sentence clarity, word choice.", color: 'bg-yellow-50', iconColor: 'text-yellow-400', hl: 'ring-yellow-400' },
+  { type: 'Copy', icon: '🔍', help: "Grammar, consistency, repetition.", color: 'bg-teal-50', iconColor: 'text-teal-400', hl: 'ring-teal-400' },
+  { type: 'Proof', icon: '🩹', help: "Typos, formatting, last details.", color: 'bg-pink-50', iconColor: 'text-pink-400', hl: 'ring-pink-400' }
+]
+
+const EDIT_DEPTHS = ['Light', 'Pro', 'Intensive']
+const PROFILES = ['Voice', 'Professional', 'Publisher: Penguin', 'Reader: YA', 'Creative']
+
+// --- Helper Components ---
+function Tooltip({ text }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span className="relative">
+      <span className="ml-2 text-purple-600 cursor-pointer" onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}>
+        <span className="inline-block w-5 h-5 bg-purple-200 text-center rounded-full font-bold text-base leading-5">?</span>
+      </span>
+      {show && (
+        <span className="absolute left-0 top-6 bg-white border border-purple-200 rounded shadow p-2 text-sm w-72 z-20 whitespace-pre-line text-gray-900">
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function AccordionSection({ title, icon, count, children, defaultOpen }) {
+  const [open, setOpen] = useState(defaultOpen ?? true)
+  return (
+    <div className="mb-4 border rounded">
+      <div className="flex items-center justify-between cursor-pointer p-3 bg-gray-100 font-semibold"
+        onClick={() => setOpen(o => !o)}>
+        <span className="flex items-center gap-2">
+          {icon && <span className="text-xl">{icon}</span>}
+          {title}{typeof count === "number" ? ` (${count})` : ''}
+        </span>
+        <span>{open ? "▼" : "►"}</span>
+      </div>
+      {open && <div className="p-3">{children}</div>}
+    </div>
+  )
+}
+
+// --- Main Component ---
+export default function Home() {
+  // Initialize undo manager
+  const undoManager = useRef(new UndoManager()).current
+
+  // --- Core State ---
+  const [text, setText] = useState('')
+  const [editType, setEditType] = useState([])
+  const [mode, setMode] = useState('General Edits')
+  const [editDepth, setEditDepth] = useState('Pro')
+  const [editProfile, setEditProfile] = useState('Voice')
+  const [thresholdOnly, setThresholdOnly] = useState(false)
+  const [writerCue, setWriterCue] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showEditOptions, setShowEditOptions] = useState(true)
+
+  // --- Suggestion State ---
+  const [groupedSuggestions, setGroupedSuggestions] = useState({})
+  const [specificEdits, setSpecificEdits] = useState([])
+  const [writerEdits, setWriterEdits] = useState([])
+  const [activeEditIdx, setActiveEditIdx] = useState(null)
+  const [history, setHistory] = useState([])
+  const [sessionLog, setSessionLog] = useState([])
+
+  // --- UI State ---
+  const [suggestionView, setSuggestionView] = useState('overview')
+  const [expandedSuggestions, setExpandedSuggestions] = useState({})
+  const [deepDiveContent, setDeepDiveContent] = useState({})
+  const [deepDiveLoading, setDeepDiveLoading] = useState({})
+  const [askLuluInputs, setAskLuluInputs] = useState({})
+  const [askLuluLogs, setAskLuluLogs] = useState({})
+
+  // --- Helpers ---
+  function getEditMeta(type) {
+    return EDIT_TYPES.find(e => e.type === type) || EDIT_TYPES[0]
+  }
+
+  function isChecked(type) {
+    if (type === 'Full Edit') return editType.length === EDIT_TYPES.length - 1
+    return editType.includes(type)
+  }
+
+  function toggleEditType(type) {
+    if (type === 'Full Edit') {
+      if (isChecked('Full Edit')) setEditType([])
+      else setEditType(EDIT_TYPES.filter(t => t.type !== 'Full Edit').map(t => t.type))
+      return
+    }
+    setEditType(prev =>
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    )
+  }
+
+console.log("Submitting:", JSON.stringify({
+  text,
+  editType,
+  mode,
+  writerCue,
+  roadmapOnly: mode === "General Edits",
+  editDepth,
+  editProfile,
+  thresholdOnly
+}, null, 2));
+  
+  // --- Submit Handler ---
+  async function handleSubmit() {
+    setLoading(true)
+    setError('')
+    setGroupedSuggestions({})
+    setWriterEdits([])
+    setSpecificEdits([])
+    setSessionLog([])
+    
+    try {
+      const res = await fetch('/api/gpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          editType,
+          mode,
+          writerCue,
+          roadmapOnly: mode === "General Edits",
+          editDepth,
+          editProfile,
+          thresholdOnly
+        })
+      })
+      
+      const data = await res.json()
+      console.log("API Response:", JSON.stringify(data, null, 2));
+      if (!res.ok) throw new Error(data.error || 'Something went wrong.')
+      
+      if (mode === "General Edits") {
+        // Process general edits
+        let writerEditGroup = []
+        let roadmapGroups = {}
+        
+        (data.roadmap || []).forEach(item => {
+          if (item.editType === "Writer's Edit") {
+            writerEditGroup.push({
+              own: item.own || item.recommendation,
+              lulu: item.lulu || item.luluEdit,
+              why: item.why,
+              principles: item.principles,
+              state: 'pending'
+            })
+          } else {
+            if (!roadmapGroups[item.editType]) roadmapGroups[item.editType] = []
+            roadmapGroups[item.editType].push({
+              ...item,
+              state: 'pending'
+            })
+          }
+        })
+        
+        setWriterEdits(writerEditGroup)
+        setGroupedSuggestions(roadmapGroups)
+        console.log("Writer Edits:", writerEditGroup);
+        console.log("Grouped Suggestions:", roadmapGroups);
+      } else if (mode === "Specific Edits") {
+        // Process specific edits
+        setSpecificEdits((data.suggestions || []).map(s => ({
+          ...s,
+          state: 'pending',
+          id: Math.random().toString(36).substr(2, 9)
+        })))
+      }
+      
+      setShowEditOptions(false)
+      undoManager.clear()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // --- Specific Edit Handlers ---
+  function handleAcceptSpecific(idx) {
+    const edit = specificEdits[idx]
+    if (!edit) return
+    
+    // Save to undo manager
+    undoManager.save({
+      text,
+      suggestions: specificEdits,
+      sugId: edit.id,
+      actionType: 'accept'
+    })
+    
+    // Update text
+    setText(prevText => {
+      const before = prevText.slice(0, edit.start)
+      const after = prevText.slice(edit.end)
+      return before + (edit.suggestion || '') + after
+    })
+    
+    // Update edit state
+    setSpecificEdits(eds => eds.map((e, i) => 
+      i === idx ? { ...e, state: 'accepted' } : e
+    ))
+    
+    // Log action
+    setSessionLog(log => [...log, {
+      action: 'accept',
+      idx,
+      suggestion: edit.suggestion,
+      ts: Date.now()
+    }])
+  }
+
+  function handleRejectSpecific(idx) {
+    const edit = specificEdits[idx]
+    if (!edit) return
+    
+    undoManager.save({
+      text,
+      suggestions: specificEdits,
+      sugId: edit.id,
+      actionType: 'reject'
+    })
+    
+    setSpecificEdits(eds => eds.map((e, i) => 
+      i === idx ? { ...e, state: 'rejected' } : e
+    ))
+    
+    setSessionLog(log => [...log, {
+      action: 'reject',
+      idx,
+      ts: Date.now()
+    }])
+  }
+
+  function handleReviseSpecific(idx, revision) {
+    const edit = specificEdits[idx]
+    if (!edit) return
+    
+    undoManager.save({
+      text,
+      suggestions: specificEdits,
+      sugId: edit.id,
+      actionType: 'revise'
+    })
+    
+    setText(prevText => {
+      const before = prevText.slice(0, edit.start)
+      const after = prevText.slice(edit.end)
+      return before + revision + after
+    })
+    
+    setSpecificEdits(eds => eds.map((e, i) => 
+      i === idx ? { ...e, state: 'revised', revision } : e
+    ))
+    
+    setSessionLog(log => [...log, {
+      action: 'revise',
+      idx,
+      revision,
+      ts: Date.now()
+    }])
+  }
+
+// --- General Edit Handlers ---
+function handleApplyGeneral(next) {
+  console.log('[Home] handleApplyGeneral called with:', next);
+  setText(next)
+}
+
+  // --- Undo Handler ---
+  function handleUndo() {
+    if (history.length === 0) return
+    const prev = history[history.length - 1]
+    setGroupedSuggestions(prev.grouped || {})
+    setWriterEdits(prev.writer || [])
+    setSpecificEdits(prev.specific || [])
+    setHistory(h => h.slice(0, -1))
+  }
+
+  // --- UI Render ---
+  return (
+    <div className="min-h-screen bg-gray-100 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold mb-8 text-center text-purple-700">Lulu Mentor App</h1>
+        
+        <div className="flex flex-col md:flex-row gap-6">
+          {/* Left Panel - Manuscript */}
+          <div className="flex-1 bg-white shadow rounded-xl p-4">
+            <label className="font-semibold block mb-1 text-lg">Your Manuscript</label>
+            
+            {mode === "Specific Edits" && specificEdits.length > 0 ? (
+              <LuluTipTap
+                initialText={text}
+                suggestions={specificEdits}
+                readOnly={false}
+              />
+            ) : (
+              <LuluEditor value={text} setValue={setText} />
+            )}
+            
+            {mode === "General Edits" && writerEdits.length > 0 && (
+              <div className="mt-4">
+                <EditRoadmap 
+                  roadmap={writerEdits}
+                  onApply={handleApplyGeneral}
+                />
+              </div>
+            )}
+          </div>
+          
+          {/* Right Panel - Options & Suggestions */}
+          <div className="w-full md:w-[28rem] bg-white shadow rounded-xl p-4">
+            {showEditOptions ? (
+              <>
+                <WriterCue cue={writerCue} setCue={setWriterCue} />
+                
+                <div className="mb-3">
+                  <label className="font-semibold block mb-1">
+                    Edit Types:
+                    <Tooltip text="Choose which types of edits you want Lulu to suggest" />
+                  </label>
+                  <div className="flex flex-wrap gap-3">
+                    {EDIT_TYPES.map(et => (
+                      <label key={et.type} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isChecked(et.type)}
+                          onChange={() => toggleEditType(et.type)}
+                        />
+                        <span className="flex items-center gap-1">{et.icon} {et.type}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap gap-3 mb-3">
+                  <div>
+                    <label className="font-semibold block mb-1">Edit Depth:</label>
+                    <select 
+                      className="p-2 border rounded w-full"
+                      value={editDepth}
+                      onChange={e => setEditDepth(e.target.value)}
+                    >
+                      {EDIT_DEPTHS.map(d => <option key={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="font-semibold block mb-1">Editorial Profile:</label>
+                    <select 
+                      className="p-2 border rounded w-full"
+                      value={editProfile}
+                      onChange={e => setEditProfile(e.target.value)}
+                    >
+                      {PROFILES.map(p => <option key={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                
+                <div className="mb-3">
+                  <label className="font-semibold block mb-1">Editing Mode:</label>
+                  <select 
+                    className="p-2 border rounded w-full"
+                    value={mode}
+                    onChange={e => setMode(e.target.value)}
+                  >
+                    <option>General Edits</option>
+                    <option>Specific Edits</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center gap-2 mb-3">
+                  <input 
+                    type="checkbox"
+                    checked={thresholdOnly}
+                    onChange={() => setThresholdOnly(x => !x)}
+                  />
+                  <label className="font-semibold">World-Class Threshold Only</label>
+                </div>
+                
+                <button 
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold"
+                >
+                  {loading ? "Thinking..." : "Submit to Lulu"}
+                </button>
+                
+                {error && <div className="text-red-500 mt-2">{error}</div>}
+              </>
+            ) : (
+              <>
+                <button
+                  className="mb-6 px-4 py-2 bg-purple-600 text-white rounded font-semibold"
+                  onClick={() => setShowEditOptions(true)}
+                >
+                  Return to Edit Options
+                </button>
+                
+                {/* Suggestions Panel */}
+                {mode === "General Edits" && (
+                  <GeneralEditsPanel 
+  groupedSuggestions={groupedSuggestions}
+  onApply={setText}
+/>
+                )}
+                
+                {mode === "Specific Edits" && specificEdits.length > 0 && (
+                  <SpecificEditsPanel
+                    suggestions={specificEdits}
+                    activeIdx={activeEditIdx}
+                    onFocus={setActiveEditIdx}
+                    onAccept={handleAcceptSpecific}
+                    onReject={handleRejectSpecific}
+                    onRevise={handleReviseSpecific}
+                    getEditMeta={getEditMeta}
+                  />
+                )}
+                
+                {/* Learning Log */}
+                <LearningLog 
+                  history={history}
+                  onUndo={handleUndo}
+                />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

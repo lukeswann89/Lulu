@@ -1,74 +1,139 @@
-// ✅ /components/GeneralEditsPanel.jsx — patched to fix Apply + checkbox behaviour
+import React from 'react';
+import EditModeContainer from './EditModeContainer';
+import AccordionSection from './AccordionSection';
+import SuggestionCard from './SuggestionCard';
 
-import { useState } from 'react';
+export default function GeneralEditsPanel({ 
+  groupedSuggestions = {}, 
+  onApply,
+  // Deep dive and interaction props
+  expandedSuggestions,
+  deepDiveContent,
+  deepDiveLoading,
+  askLuluLogs,
+  askLuluInputs,
+  onToggleDeepDive,
+  onAskLuluInput,
+  onAskLuluSubmit,
+  // Action handlers
+  onAccept,
+  onReject,
+  onRevise,
+  onUndo,
+  onStartRevise,
+  onSaveRevise,
+  onCancelRevise,
+  activeRevise,
+  setActiveRevise,
+  getEditMeta
+}) {
 
-export default function GeneralEditsPanel({ groupedSuggestions = {}, onApply }) {
-  const priorities = {
-    High: 'text-red-600',
-    Medium: 'text-yellow-600',
-    Low: 'text-gray-500'
-  };
+  // Render function for suggestion cards in different modes
+  const renderSuggestionCard = ({ suggestions, selected = {}, onToggleSelect = null, focusMode = false, mode }) => {
+    if (focusMode) {
+      // Focus mode - render single suggestion
+      const sug = suggestions[0];
+      if (!sug) return null;
+      
+      const meta = getEditMeta(sug.type || sug.editType || 'General');
+      const sKey = `${sug.isWriter ? 'w' : 's'}_${sug.type}_${sug.idx}`;
+      
+      return (
+        <SuggestionCard
+          sug={sug}
+          idx={sug.idx}
+          groupType={sug.type}
+          meta={meta}
+          sKey={sKey}
+          collapsed={['accepted', 'rejected', 'revised'].includes(sug.state)}
+          expanded={expandedSuggestions?.[sKey]}
+          deepDiveContent={deepDiveContent?.[sKey]}
+          deepDiveLoading={deepDiveLoading?.[sKey]}
+          askLuluLogs={askLuluLogs?.[sKey]}
+          askLuluInputs={askLuluInputs?.[sKey]}
+          onToggleDeepDive={onToggleDeepDive}
+          onAskLuluInput={onAskLuluInput}
+          onAskLuluSubmit={onAskLuluSubmit}
+          onAccept={onAccept}
+          onReject={onReject}
+          onRevise={onRevise}
+          onUndo={onUndo}
+          onStartRevise={onStartRevise}
+          onSaveRevise={onSaveRevise}
+          onCancelRevise={onCancelRevise}
+          activeRevise={activeRevise}
+          setActiveRevise={setActiveRevise}
+          mode={mode}
+          priority={sug.priority}
+        />
+      );
+    }
 
-  const [selected, setSelected] = useState({});
-
-  const toggle = (key) => {
-    setSelected(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const applySelected = () => {
-    const itemsToApply = Object.entries(selected)
-      .filter(([_, isChecked]) => isChecked)
-      .map(([key]) => key.split('::'))
-      .map(([type, i]) => groupedSuggestions[type][parseInt(i)])
-      .map(item => `• ${item.recommendation}`);
-
-    onApply && onApply(prev => `${prev}
-
-Changes to make:
-${itemsToApply.join('\n')}`);
-  };
-
-  return (
-    <div className="mt-6 bg-white p-4 rounded shadow">
-      <h2 className="text-xl font-semibold mb-4">📘 General Editorial Feedback</h2>
-      {Object.entries(groupedSuggestions).map(([category, items]) => (
-        <div key={category} className="mb-6">
-          <h3 className="text-lg font-bold mb-2 border-b pb-1">{category}</h3>
-          {items.length > 0 ? (
+    // Overview mode - render grouped suggestions
+    return Object.entries(suggestions).map(([category, items]) => {
+      const meta = getEditMeta(category);
+      
+      return (
+        <AccordionSection
+          key={category}
+          title={category}
+          icon={meta?.icon}
+          count={items?.length || 0}
+          defaultOpen={(items?.length || 0) <= 3}
+        >
+          {items && items.length > 0 ? (
             items.map((item, index) => {
-              const id = `${category}::${index}`;
+              const sKey = `${category}::${index}`;
+              const suggestionMeta = getEditMeta(category);
+              
               return (
-                <div key={id} className="mb-4 p-3 border rounded">
-                  <label className="flex gap-2 items-start">
-                    <input
-                      type="checkbox"
-                      checked={!!selected[id]}
-                      onChange={() => toggle(id)}
-                    />
-                    <div className="flex-1">
-                      <p className={`font-medium ${priorities[item.priority] || 'text-gray-800'}`}>
-                        {item.priority && `🔹 ${item.priority}`} — {item.recommendation}
-                      </p>
-                      <p className="text-sm italic text-gray-600 mb-1">Why: {item.why}</p>
-                      {item.principles?.length > 0 && (
-                        <p className="text-sm text-blue-700">Principles: {item.principles.join(', ')}</p>
-                      )}
-                    </div>
-                  </label>
-                </div>
+                <SuggestionCard
+                  key={sKey}
+                  sug={{ ...item, idx: index, type: category }}
+                  idx={index}
+                  groupType={category}
+                  meta={suggestionMeta}
+                  sKey={sKey}
+                  collapsed={['accepted', 'rejected', 'revised'].includes(item.state)}
+                  expanded={expandedSuggestions?.[sKey]}
+                  deepDiveContent={deepDiveContent?.[sKey]}
+                  deepDiveLoading={deepDiveLoading?.[sKey]}
+                  askLuluLogs={askLuluLogs?.[sKey]}
+                  askLuluInputs={askLuluInputs?.[sKey]}
+                  onToggleDeepDive={onToggleDeepDive}
+                  onAskLuluInput={onAskLuluInput}
+                  onAskLuluSubmit={onAskLuluSubmit}
+                  onAccept={onAccept}
+                  onReject={onReject}
+                  onRevise={onRevise}
+                  onUndo={onUndo}
+                  onStartRevise={onStartRevise}
+                  onSaveRevise={onSaveRevise}
+                  onCancelRevise={onCancelRevise}
+                  activeRevise={activeRevise}
+                  setActiveRevise={setActiveRevise}
+                  mode={mode}
+                  priority={item.priority}
+                  selected={selected[sKey]}
+                  onToggleSelect={onToggleSelect}
+                />
               );
             })
           ) : (
             <p className="text-sm text-gray-500 italic">No suggestions in this category.</p>
           )}
-        </div>
-      ))}
-      <button
-        onClick={applySelected}
-        className="bg-green-600 text-white px-4 py-2 rounded text-sm"
-      >
-        ✅ Apply Selected Notes to Text
-      </button>
-    </div>
+        </AccordionSection>
+      );
+    });
+  };
+
+  return (
+    <EditModeContainer
+      title="📘 General Editorial Feedback"
+      suggestions={groupedSuggestions}
+      mode="General Edits"
+      renderSuggestionCard={renderSuggestionCard}
+      onApplySelected={onApply}
+    />
   );
 }
