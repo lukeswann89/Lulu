@@ -16,12 +16,18 @@ export default function EditModeContainer({
   const [selected, setSelected] = useState({}); // For General Edits selection
 
   // Calculate total suggestions
-  const allSuggestions = Array.isArray(suggestions) ? suggestions : 
-    Object.values(suggestions).flat();
+  const allSuggestions = Array.isArray(suggestions)
+    ? suggestions
+    : Object.values(suggestions).flat();
   const suggestionsLength = allSuggestions.length;
 
+  // FIX: Properly detect truly empty for both arrays and grouped objects
+  const isTrulyEmpty = Array.isArray(suggestions)
+    ? suggestions.length === 0
+    : Object.values(suggestions).flat().length === 0;
+
   // Check if all edits are processed
-  const editsProcessed = allSuggestions.filter(s => 
+  const editsProcessed = allSuggestions.filter(s =>
     ['accepted', 'rejected', 'revised'].includes(s.state)
   ).length;
   const allDone = suggestionsLength > 0 && editsProcessed === suggestionsLength;
@@ -34,7 +40,6 @@ export default function EditModeContainer({
   // Apply selected for General Edits
   const handleApplySelected = () => {
     if (!onApplySelected) return;
-    
     const itemsToApply = Object.entries(selected)
       .filter(([_, isChecked]) => isChecked)
       .map(([key]) => {
@@ -49,6 +54,19 @@ export default function EditModeContainer({
     }
   };
 
+  // FIX: Early return if there are truly no suggestions to show
+  if (isTrulyEmpty) {
+    return (
+      <div className="mt-6 bg-white p-4 rounded shadow">
+        <h2 className="text-xl font-semibold text-purple-800">
+          {icon && <span className="mr-2">{icon}</span>}
+          {title}
+        </h2>
+        <div className="text-gray-400 italic mt-4">No suggestions found.</div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-6 bg-white p-4 rounded shadow">
       {/* Header with View Toggle */}
@@ -60,7 +78,7 @@ export default function EditModeContainer({
         <div className="flex items-center gap-2">
           {extraControls}
           <div className="flex gap-1">
-            <button 
+            <button
               className={`px-2 py-1 rounded text-xs ${
                 viewMode === 'overview' ? 'bg-purple-200 font-bold' : 'bg-gray-100'
               }`}
@@ -68,7 +86,7 @@ export default function EditModeContainer({
             >
               Overview
             </button>
-            <button 
+            <button
               className={`px-2 py-1 rounded text-xs ${
                 viewMode === 'focus' ? 'bg-purple-200 font-bold' : 'bg-gray-100'
               }`}
@@ -91,13 +109,13 @@ export default function EditModeContainer({
       {viewMode === 'overview' ? (
         <>
           {/* Overview Mode - Show all suggestions grouped */}
-          {renderSuggestionCard({ 
-            suggestions, 
-            selected, 
+          {renderSuggestionCard({
+            suggestions,
+            selected,
             onToggleSelect: toggleSelection,
-            mode 
+            mode
           })}
-          
+
           {/* Apply Selected Button for General Edits */}
           {mode === "General Edits" && onApplySelected && Object.keys(selected).some(k => selected[k]) && (
             <div className="mt-4">
@@ -118,14 +136,14 @@ export default function EditModeContainer({
               <div className="flex items-center justify-between mb-3">
                 <span className="font-medium">{focusIndex + 1} of {suggestionsLength}</span>
               </div>
-              
+
               {/* Render focused suggestion */}
-              {renderSuggestionCard({ 
-                suggestions: [allSuggestions[focusIndex]], 
+              {renderSuggestionCard({
+                suggestions: [allSuggestions[focusIndex]],
                 focusMode: true,
-                mode 
+                mode
               })}
-              
+
               {/* Navigation */}
               <div className="flex justify-between mt-3">
                 <button

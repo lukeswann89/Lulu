@@ -30,6 +30,8 @@ export default function SpecificEditsPanel({
   onRedoHistory,
 }) {
   
+  console.log("SpecificEditsPanel props.suggestions:", suggestions);
+  
   // Group suggestions by editType/type
   const groupedSuggestions = {};
   for (const [i, sug] of suggestions.entries()) {
@@ -74,6 +76,7 @@ export default function SpecificEditsPanel({
           activeRevise={activeRevise}
           setActiveRevise={setActiveRevise}
           mode={mode}
+          priority={sug.priority} // Pass priority for ALL cards
         />
       );
     }
@@ -120,6 +123,7 @@ export default function SpecificEditsPanel({
                 activeRevise={activeRevise}
                 setActiveRevise={setActiveRevise}
                 mode={mode}
+                priority={sug.priority} // Pass priority for ALL cards
               />
             );
           })}
@@ -133,7 +137,7 @@ export default function SpecificEditsPanel({
     <div className="flex gap-2">
       {onUndoHistory && (
         <button 
-          className="px-2 py-1 bg-gray-200 rounded text-xs"
+          className="px-2 py-1 bg-gray-200 rounded text-xs hover:bg-gray-300"
           onClick={onUndoHistory}
         >
           Undo
@@ -141,7 +145,7 @@ export default function SpecificEditsPanel({
       )}
       {onRedoHistory && (
         <button 
-          className="px-2 py-1 bg-gray-200 rounded text-xs"
+          className="px-2 py-1 bg-gray-200 rounded text-xs hover:bg-gray-300"
           onClick={onRedoHistory}
         >
           Redo
@@ -159,6 +163,8 @@ export default function SpecificEditsPanel({
     );
   }
 
+console.log("SpecificEditsPanel groupedSuggestions:", groupedSuggestions)
+
   return (
     <EditModeContainer
       title="✏️ Specific Edit Suggestions"
@@ -169,4 +175,3 @@ export default function SpecificEditsPanel({
     />
   );
 }
-      

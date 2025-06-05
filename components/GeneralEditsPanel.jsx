@@ -5,6 +5,7 @@ import SuggestionCard from './SuggestionCard';
 
 export default function GeneralEditsPanel({ 
   groupedSuggestions = {}, 
+  writerEdits = [], // Add writerEdits prop
   onApply,
   // Deep dive and interaction props
   expandedSuggestions,
@@ -16,6 +17,9 @@ export default function GeneralEditsPanel({
   onAskLuluInput,
   onAskLuluSubmit,
   // Action handlers
+  onAcceptWriter,
+  onRejectWriter,
+  onReviseWriter,
   onAccept,
   onReject,
   onRevise,
@@ -54,10 +58,10 @@ export default function GeneralEditsPanel({
           onToggleDeepDive={onToggleDeepDive}
           onAskLuluInput={onAskLuluInput}
           onAskLuluSubmit={onAskLuluSubmit}
-          onAccept={onAccept}
-          onReject={onReject}
-          onRevise={onRevise}
-          onUndo={onUndo}
+          onAccept={sug.isWriter ? onAcceptWriter : onAccept}
+          onReject={sug.isWriter ? onRejectWriter : onReject}
+          onRevise={sug.isWriter ? onReviseWriter : onRevise}
+          onUndo={(idx, type) => onUndo(idx, type || sug.type)}
           onStartRevise={onStartRevise}
           onSaveRevise={onSaveRevise}
           onCancelRevise={onCancelRevise}
@@ -70,7 +74,30 @@ export default function GeneralEditsPanel({
     }
 
     // Overview mode - render grouped suggestions
-    return Object.entries(suggestions).map(([category, items]) => {
+    const allGroupsToRender = [];
+
+    // Add Writer's Edits first if they exist
+    if (writerEdits && writerEdits.length > 0) {
+      allGroupsToRender.push(['Writer\'s Edit', writerEdits.map((item, index) => ({
+        ...item,
+        idx: index,
+        isWriter: true,
+        type: 'Writer\'s Edit'
+      }))]);
+    }
+
+    // Add other grouped suggestions
+    Object.entries(suggestions).forEach(([category, items]) => {
+      if (items && items.length > 0) {
+        allGroupsToRender.push([category, items.map((item, index) => ({
+          ...item,
+          idx: index,
+          type: category
+        }))]);
+      }
+    });
+
+    return allGroupsToRender.map(([category, items]) => {
       const meta = getEditMeta(category);
       
       return (
@@ -89,8 +116,8 @@ export default function GeneralEditsPanel({
               return (
                 <SuggestionCard
                   key={sKey}
-                  sug={{ ...item, idx: index, type: category }}
-                  idx={index}
+                  sug={item}
+                  idx={item.idx}
                   groupType={category}
                   meta={suggestionMeta}
                   sKey={sKey}
@@ -103,10 +130,10 @@ export default function GeneralEditsPanel({
                   onToggleDeepDive={onToggleDeepDive}
                   onAskLuluInput={onAskLuluInput}
                   onAskLuluSubmit={onAskLuluSubmit}
-                  onAccept={onAccept}
-                  onReject={onReject}
-                  onRevise={onRevise}
-                  onUndo={onUndo}
+                  onAccept={item.isWriter ? onAcceptWriter : onAccept}
+                  onReject={item.isWriter ? onRejectWriter : onReject}
+                  onRevise={item.isWriter ? onReviseWriter : onRevise}
+                  onUndo={(idx, type) => onUndo(idx, type || category)}
                   onStartRevise={onStartRevise}
                   onSaveRevise={onSaveRevise}
                   onCancelRevise={onCancelRevise}
@@ -127,10 +154,16 @@ export default function GeneralEditsPanel({
     });
   };
 
+  // Combine all suggestions for the container
+  const allSuggestions = { ...groupedSuggestions };
+  if (writerEdits && writerEdits.length > 0) {
+    allSuggestions['Writer\'s Edit'] = writerEdits;
+  }
+
   return (
     <EditModeContainer
       title="📘 General Editorial Feedback"
-      suggestions={groupedSuggestions}
+      suggestions={allSuggestions}
       mode="General Edits"
       renderSuggestionCard={renderSuggestionCard}
       onApplySelected={onApply}

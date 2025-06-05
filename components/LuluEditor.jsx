@@ -3,75 +3,164 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
-import Bold from '@tiptap/extension-bold'
-import Italic from '@tiptap/extension-italic'
-import BulletList from '@tiptap/extension-bullet-list'
-import OrderedList from '@tiptap/extension-ordered-list'
-import ListItem from '@tiptap/extension-list-item'
-import Heading from '@tiptap/extension-heading'
-import Paragraph from '@tiptap/extension-paragraph'
 
 export default function LuluEditor({ value, setValue }) {
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Bold,
-      Italic,
       Underline,
-      BulletList,
-      OrderedList,
-      ListItem,
-      Heading.configure({ levels: [1,2,3] }),
-      Paragraph
     ],
     content: value,
+    immediatelyRender: false, // Fix SSR hydration issues
     onUpdate: ({ editor }) => {
       setValue(editor.getHTML())
-    }
+    },
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[300px] p-4',
+      },
+    },
   })
 
-  if (!editor) return <div>Loading editor...</div>
+  if (!editor) {
+    return (
+      <div className="border rounded-lg p-4 min-h-[300px] bg-gray-50 animate-pulse">
+        <div className="text-gray-500">Loading editor...</div>
+      </div>
+    )
+  }
 
   return (
-    <div>
-      <div className="flex flex-wrap gap-2 mb-2">
-        <button onClick={() => editor.chain().focus().toggleBold().run()}
-          className={editor.isActive('bold') ? 'bg-purple-200 rounded px-2 py-1 font-bold' : 'px-2 py-1'}>
+    <div className="border rounded-lg overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex flex-wrap gap-1 p-2 bg-gray-50 border-b">
+        <button
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            editor.isActive('bold') 
+              ? 'bg-purple-200 text-purple-800' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          type="button"
+        >
           <b>B</b>
         </button>
-        <button onClick={() => editor.chain().focus().toggleItalic().run()}
-          className={editor.isActive('italic') ? 'bg-purple-200 rounded px-2 py-1 font-bold italic' : 'px-2 py-1'}>
+        
+        <button
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            editor.isActive('italic') 
+              ? 'bg-purple-200 text-purple-800' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          type="button"
+        >
           <i>I</i>
         </button>
-        <button onClick={() => editor.chain().focus().toggleUnderline().run()}
-          className={editor.isActive('underline') ? 'bg-purple-200 rounded px-2 py-1 font-bold underline' : 'px-2 py-1'}>
+        
+        <button
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            editor.isActive('underline') 
+              ? 'bg-purple-200 text-purple-800' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          type="button"
+        >
           <u>U</u>
         </button>
-        <button onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={editor.isActive('bulletList') ? 'bg-purple-200 rounded px-2 py-1' : 'px-2 py-1'}>
-          • Bulleted List
+
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+        <button
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            editor.isActive('bulletList') 
+              ? 'bg-purple-200 text-purple-800' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          type="button"
+        >
+          • List
         </button>
-        <button onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className={editor.isActive('orderedList') ? 'bg-purple-200 rounded px-2 py-1' : 'px-2 py-1'}>
-          1. Numbered List
+        
+        <button
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            editor.isActive('orderedList') 
+              ? 'bg-purple-200 text-purple-800' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          type="button"
+        >
+          1. List
         </button>
-        <button onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          className={editor.isActive('heading', { level: 1 }) ? 'bg-purple-200 rounded px-2 py-1' : 'px-2 py-1'}>
+
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+        <button
+          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            editor.isActive('heading', { level: 1 }) 
+              ? 'bg-purple-200 text-purple-800' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          type="button"
+        >
           H1
         </button>
-        <button onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          className={editor.isActive('heading', { level: 2 }) ? 'bg-purple-200 rounded px-2 py-1' : 'px-2 py-1'}>
+        
+        <button
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            editor.isActive('heading', { level: 2 }) 
+              ? 'bg-purple-200 text-purple-800' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          type="button"
+        >
           H2
         </button>
-        <button onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          className={editor.isActive('heading', { level: 3 }) ? 'bg-purple-200 rounded px-2 py-1' : 'px-2 py-1'}>
+        
+        <button
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+            editor.isActive('heading', { level: 3 }) 
+              ? 'bg-purple-200 text-purple-800' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          type="button"
+        >
           H3
         </button>
-        <button onClick={() => editor.chain().focus().undo().run()} className="px-2 py-1">⎌ Undo</button>
-        <button onClick={() => editor.chain().focus().redo().run()} className="px-2 py-1">⎌ Redo</button>
+
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+        <button
+          onClick={() => editor.chain().focus().undo().run()}
+          disabled={!editor.can().undo()}
+          className="px-3 py-1 rounded text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          type="button"
+        >
+          ↶ Undo
+        </button>
+        
+        <button
+          onClick={() => editor.chain().focus().redo().run()}
+          disabled={!editor.can().redo()}
+          className="px-3 py-1 rounded text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          type="button"
+        >
+          ↷ Redo
+        </button>
       </div>
-      <div className="border rounded-lg p-2 min-h-[300px]">
-        <EditorContent editor={editor} />
+
+      {/* Editor Content */}
+      <div className="min-h-[300px] p-4 bg-white">
+        <EditorContent 
+          editor={editor} 
+          className="prose prose-sm max-w-none focus:outline-none"
+        />
       </div>
     </div>
   )

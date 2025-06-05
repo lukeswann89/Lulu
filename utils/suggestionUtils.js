@@ -1,35 +1,24 @@
-// utils/suggestionUtils.js
+// /utils/suggestionUtils.js
 
-export function findAllPositions(text, searchStr) { /* ...your code... */ }
-export function realignSuggestions(text, suggestions) { /* ...your code... */ }
-
-// --- Add these below ---
-
-export function getEditMeta(type) {
-  const EDIT_TYPES = [
-    { type: 'Full Edit', icon: '🪄', color: 'bg-purple-50', iconColor: 'text-purple-500', hl: 'ring-purple-400' },
-    { type: 'Developmental', icon: '🖼️', color: 'bg-blue-50', iconColor: 'text-blue-400', hl: 'ring-blue-400' },
-    { type: 'Structural', icon: '🪜', color: 'bg-green-50', iconColor: 'text-green-400', hl: 'ring-green-400' },
-    { type: 'Line', icon: '📜', color: 'bg-yellow-50', iconColor: 'text-yellow-400', hl: 'ring-yellow-400' },
-    { type: 'Copy', icon: '🔍', color: 'bg-teal-50', iconColor: 'text-teal-400', hl: 'ring-teal-400' },
-    { type: 'Proof', icon: '🩹', color: 'bg-pink-50', iconColor: 'text-pink-400', hl: 'ring-pink-400' }
-  ]
-  return EDIT_TYPES.find(e => e.type === type) || EDIT_TYPES[0]
-}
+import { getEditMeta } from './editorConfig';
 
 export function debounce(fn, ms) {
-  let timer; return (...args) => {
-    clearTimeout(timer); timer = setTimeout(() => fn(...args), ms)
+  let timer; 
+  return (...args) => {
+    clearTimeout(timer); 
+    timer = setTimeout(() => fn(...args), ms)
   }
 }
 
 export function highlightManuscript(text, specificEdits, activeIdx, showHighlights, showNumbers) {
   if (!showHighlights || !specificEdits?.length) return text
   let out = text
+  // Sort by descending start to avoid index shifting as we insert spans
   const byStart = [...specificEdits]
     .filter(s => s.state === 'pending')
     .map((s, i) => ({...s, idx: i}))
     .sort((a, b) => b.start - a.start)
+  
   byStart.forEach((s, i) => {
     const {start, end, editType, idx} = s
     if (start == null || end == null || start >= end) return
@@ -44,4 +33,29 @@ export function highlightManuscript(text, specificEdits, activeIdx, showHighligh
       after
   })
   return out
+}
+
+export function findAllPositions(text, searchText) {
+  const positions = [];
+  let index = text.indexOf(searchText);
+  while (index !== -1) {
+    positions.push(index);
+    index = text.indexOf(searchText, index + 1);
+  }
+  return positions;
+}
+
+export function realignSuggestions(text, suggestions) {
+  return suggestions.map(sug => {
+    if (!sug.original) return sug;
+    const positions = findAllPositions(text, sug.original);
+    if (positions.length > 0) {
+      return {
+        ...sug,
+        start: positions[0],
+        end: positions[0] + sug.original.length
+      };
+    }
+    return sug;
+  });
 }

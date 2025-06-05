@@ -5,11 +5,22 @@ import { EDIT_TYPES, EDIT_DEPTHS, PROFILES, EDIT_TYPE_TOOLTIP, getEditMeta } fro
 import Tooltip from '../components/Tooltip'
 import GeneralEditsPanel from '../components/GeneralEditsPanel'
 import SpecificEditsPanel from '../components/SpecificEditsPanel'
+import SuggestionCard from '../components/SuggestionCard'
+import LuluTipTap from '../components/LuluTipTap'
 
 // DYNAMIC MANUSCRIPT EDITOR
 const LuluEditor = dynamic(() => import('../components/LuluEditor'), { ssr: false })
 
 // --- UI Components ---
+
+// Helper function to generate short title from suggestion text
+function generateShortTitle(text) {
+  if (!text) return 'Untitled Suggestion';
+  const cleanText = text.replace(/^["']|["']$/g, '').trim();
+  const words = cleanText.split(/\s+/);
+  const shortTitle = words.slice(0, Math.min(7, words.length)).join(' ');
+  return words.length > 7 ? `${shortTitle}...` : shortTitle;
+}
 
 export default function Home() {
   // --- State ---
@@ -32,16 +43,8 @@ export default function Home() {
   const [text, setText] = useState('')
   const [showEditOptions, setShowEditOptions] = useState(true)
   const [logAccordion, setLogAccordion] = useState(false)
-  // Suggestions Navigation
-  const [suggestionView, setSuggestionView] = useState('overview') // overview | focus
-  const allSuggestions = [
-    ...writerEdits.map((sug, idx) => ({...sug, isWriter: true, idx, type: "Writer's Edit"})),
-    ...Object.entries(groupedSuggestions).flatMap(([type, arr]) =>
-      arr.map((sug, idx) => ({...sug, isWriter: false, idx, type}))
-    )
-  ]
+  const [isFocusView, setIsFocusView] = useState(false)
   const [focusIndex, setFocusIndex] = useState(0)
-  const suggestionsLength = allSuggestions.length
   // Deep Dive / Ask Lulu (chat log per suggestion)
   const [expandedSuggestions, setExpandedSuggestions] = useState({})
   const [deepDiveContent, setDeepDiveContent] = useState({})
@@ -135,6 +138,7 @@ export default function Home() {
         })
       })
       const data = await res.json()
+      console.log("API /gpt response for Specific Edits:", data)
       if (!res.ok) throw new Error(data.error || 'Something went wrong.')
       let writerEditGroup = []
       let roadmapGroups = {}
@@ -164,6 +168,7 @@ export default function Home() {
       } else if (mode === "Specific Edits") {
         // Specific Edits array
         setSpecificEdits((data.suggestions || []).map(s => ({...s, state:'pending'})))
+        console.log("Set specificEdits to:", data.suggestions)
         setAuthorship({ user: 100, lulu: 0 })
         pushHistory({}, [])
         setSessionLog([])
@@ -184,13 +189,20 @@ export default function Home() {
       const sugObj = action === 'WriterEdit'
         ? writerEdits[detail.idx]
         : (groupedSuggestions[detail.editType] || [])[detail.idx]
-      const mainContent = sugObj
-        ? (sugObj.lulu || sugObj.own || sugObj.recommendation || '')
-        : ''
-      context = `${mainContent}${detail.revision ? ` (${detail.revision})` : ''}`
+      
+      if (sugObj) {
+        const mainContent = sugObj.lulu || sugObj.own || sugObj.recommendation || ''
+        const title = sugObj.title || generateShortTitle(mainContent)
+        const actionType = detail.newState.charAt(0).toUpperCase() + detail.newState.slice(1)
+        const editType = detail.editType || "Writer's Edit"
+        const timestamp = new Date().toLocaleTimeString()
+        
+        context = `${actionType}: '${title}' (${editType}) at ${timestamp}${detail.revision ? ` - Revised to: "${detail.revision}"` : ''}`
+      }
     } else if (action === 'Ask Lulu') {
       context = `Q: ${detail.revision} → A: ${detail.newState}`
     }
+    
     setSessionLog(log => [...log, {
       action,
       newState: detail.newState,
@@ -200,7 +212,7 @@ export default function Home() {
     }])
   }
   function autoAdvance() {
-    if (mode === "General Edits" && suggestionView === 'focus' && suggestionsLength > 1) {
+    if (mode === "General Edits" && isFocusView && suggestionsLength > 1) {
       setTimeout(() => {
         setFocusIndex(i => i < suggestionsLength - 1 ? i + 1 : i)
       }, 250)
@@ -301,9 +313,10 @@ export default function Home() {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
-            suggestion: sug.isWriter ? (sug.lulu || sug.own) : (sug.recommendation),
+            suggestion: sug.isWriter ? (sug.lulu || sug.own) : (sug.recommendation || sug.suggestion),
             why: sug.why,
-            principles: sug.principles,
+            principles: sug.principles || [],
+            fullContext: sug.fullContext,
             manuscript
           })
         })
@@ -361,6 +374,14 @@ export default function Home() {
   const layoutClass = "flex flex-col md:flex-row gap-6"
   const lhsClass = "flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit"
   const rhsClass = "w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit"
+  // Suggestions Navigation
+  const allSuggestions = [
+    ...writerEdits.map((sug, idx) => ({...sug, isWriter: true, idx, type: "Writer's Edit"})),
+    ...Object.entries(groupedSuggestions).flatMap(([type, arr]) =>
+      arr.map((sug, idx) => ({...sug, isWriter: false, idx, type}))
+    )
+  ]
+  const suggestionsLength = allSuggestions.length
   function isChecked(type) {
   if (type === 'Full Edit') return editType.length === EDIT_TYPES.length - 1
   return editType.includes(type)
@@ -386,49 +407,24 @@ function toggleEditType(type) {
           {/* LHS: Manuscript Editor */}
           <div className="flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit">
             <label className="font-semibold block mb-1 text-lg">Your Manuscript</label>
-            {mode === "Specific Edits" && specificEdits.length && showHighlights ? (
-              <div
-                className="border rounded min-h-[14rem] p-3 text-base whitespace-pre-wrap font-serif"
-                style={{outline:'2px solid #a78bfa', position:'relative', minHeight:'300px'}}
-                dangerouslySetInnerHTML={{__html: highlightManuscript(text, specificEdits, activeEditIdx, showHighlights, showNumbers)}}
-              />
-            ) : (
-              <LuluEditor value={text} setValue={setText} />
-            )}
-            {mode === "Specific Edits" && !showEditOptions && (
-  <SpecificEditsPanel
-    suggestions={specificEdits}
-    expandedSuggestions={expandedSuggestions}
-    deepDiveContent={deepDiveContent}
-    deepDiveLoading={deepDiveLoading}
-    askLuluLogs={askLuluLogs}
-    askLuluInputs={askLuluInputs}
-    onToggleDeepDive={handleToggleDeepDive}
-    onAskLuluInput={handleAskLuluInput}
-    onAskLuluSubmit={handleAskLuluSubmit}
-    onAccept={acceptSpecific}
-    onReject={rejectSpecific}
-    onRevise={reviseSpecific}
-    onUndo={(idx) => setSpecificEdits(eds => eds.map((e,i) => i === idx ? {...e, state: 'pending'} : e))}
-    onStartRevise={(type, idx, val) => setActiveRevise({type, idx, val})}
-    onSaveRevise={(type, idx, val) => reviseSpecific(idx, val)}
-    onCancelRevise={() => setActiveRevise({type: null, idx: null, val: ''})}
-    activeRevise={activeRevise}
-    setActiveRevise={setActiveRevise}
-    getEditMeta={getEditMeta}
-    onUndoHistory={undo}
-    onRedoHistory={redo}
-  />
+<LuluTipTap 
+  value={text} 
+  setValue={setText}
+  specificEdits={mode === "Specific Edits" ? specificEdits : []}
+  onAcceptSpecific={acceptSpecific}
+  onRejectSpecific={rejectSpecific}
+  onReviseSpecific={reviseSpecific}
+  showHighlights={showHighlights && mode === "Specific Edits"}
+/>
+{!showEditOptions && mode === "General Edits" && (
+  <div className="mt-6 mb-4">
+    <b>Authorship meter:</b>
+    <div className="flex items-center gap-2 mt-1">
+      <span className="bg-purple-200 px-2 rounded">User: {authorship.user}%</span>
+      <span className="bg-blue-200 px-2 rounded">Lulu: {authorship.lulu}%</span>
+    </div>
+  </div>
 )}
-            {!showEditOptions && mode === "General Edits" && (
-              <div className="mt-6 mb-4">
-                <b>Authorship meter:</b>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="bg-purple-200 px-2 rounded">User: {authorship.user}%</span>
-                  <span className="bg-blue-200 px-2 rounded">Lulu: {authorship.lulu}%</span>
-                </div>
-              </div>
-            )}
           </div>
           {/* RHS: Options + Suggestion Panel */}
           <div className="w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit" style={{ minWidth: '24rem' }}>
@@ -512,6 +508,7 @@ function toggleEditType(type) {
                 {mode === "General Edits" && !showEditOptions && (
   <GeneralEditsPanel
     groupedSuggestions={groupedSuggestions}
+    writerEdits={writerEdits}
     onApply={(selectedText) => setText(prev => `${prev}\n\n${selectedText}`)}
     expandedSuggestions={expandedSuggestions}
     deepDiveContent={deepDiveContent}
@@ -521,10 +518,19 @@ function toggleEditType(type) {
     onToggleDeepDive={handleToggleDeepDive}
     onAskLuluInput={handleAskLuluInput}
     onAskLuluSubmit={handleAskLuluSubmit}
-    onAccept={updateSuggestion}
-    onReject={updateSuggestion}
-    onRevise={updateSuggestion}
-    onUndo={(idx, type) => updateSuggestion(type, idx, 'pending')}
+    onAcceptWriter={(idx, state, revision) => updateWriterEdit(idx, state, revision)}
+    onRejectWriter={(idx, state) => updateWriterEdit(idx, state)}
+    onReviseWriter={(idx, state, revision) => updateWriterEdit(idx, state, revision)}
+    onAccept={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
+    onReject={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
+    onRevise={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
+    onUndo={(idx, type) => {
+      if (type === "Writer's Edit") {
+        updateWriterEdit(idx, 'pending')
+      } else {
+        updateSuggestion(type, idx, 'pending')
+      }
+    }}
     onStartRevise={startRevise}
     onSaveRevise={saveRevise}
     onCancelRevise={cancelRevise}
@@ -534,6 +540,7 @@ function toggleEditType(type) {
   />
 )}
                 {/* Specific Edits Panel */}
+                console.log("Passing to SpecificEditsPanel:", specificEdits)
                 {mode === "Specific Edits" && (
   <SpecificEditsPanel
   suggestions={specificEdits}
