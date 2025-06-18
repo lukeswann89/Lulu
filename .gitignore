@@ -26,3 +26,5 @@ Thumbs.db
 *.msi
 *.dmg
 CursorUserSetup*
+
+.vercel

@@ -461,3 +461,28 @@ export function getSuggestions(state) {
 }
 
 export default suggestionPlugin;
+
+// Add to your existing PositionMapper class
+class OptimizedPositionMapper extends PositionMapper {
+  constructor() {
+    super();
+    this.cache = new Map();
+    this.cacheSize = 1000;
+  }
+
+  static mapCharacterToDoc(doc, charPos) {
+    const cacheKey = `${doc.content.size}_${charPos}`;
+    
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+
+    const result = super.mapCharacterToDoc(doc, charPos);
+    
+    if (this.cache.size < this.cacheSize) {
+      this.cache.set(cacheKey, result);
+    }
+    
+    return result;
+  }
+}
