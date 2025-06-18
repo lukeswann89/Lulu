@@ -2,9 +2,8 @@
 // FIXED: Actually calls the plugin to apply suggestions
 
 "use client";
-import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef, useMemo } from "react";
+import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import dynamic from 'next/dynamic';
-import { debounce, throttle } from 'lodash';
 
 // Import your proven ProseMirror foundation
 import { EditorView } from "prosemirror-view";
@@ -13,7 +12,6 @@ import { luluSchema } from "../schemas/luluSchema";
 import { suggestionPlugin, setSuggestions } from "../plugins/suggestionPlugin"; // FIXED: Import setSuggestions
 import { createDocFromText, docToText } from "../utils/prosemirrorHelpers";
 import { SuggestionManager } from "../utils/suggestionManager";
-import { SpatialIndex } from '../utils/spatialIndex';
 
 const ProseMirrorIntegration = forwardRef(({
   value = "",
@@ -44,8 +42,6 @@ const ProseMirrorIntegration = forwardRef(({
   const viewRef = useRef(null);
   const suggestionManagerRef = useRef(null);
   const lastContentRef = useRef("");
-  const [viewportRange, setViewportRange] = useState({ start: 0, end: 0 });
-  const spatialIndexRef = useRef(null);
 
   // Transform specificEdits to match your ProseMirror foundation format
   const transformedSuggestions = specificEdits
@@ -70,14 +66,6 @@ const ProseMirrorIntegration = forwardRef(({
   if (debug) {
     console.log('📝 Transformed suggestions:', transformedSuggestions.length, transformedSuggestions);
   }
-
-  // Add debouncing for better performance
-  const debouncedSetSuggestions = useMemo(
-    () => debounce((view, suggestions) => {
-      setSuggestions(view, suggestions);
-    }, 100),
-    []
-  );
 
   // Initialize ProseMirror editor
   useEffect(() => {
@@ -181,46 +169,32 @@ const ProseMirrorIntegration = forwardRef(({
     }
   }, [value, debug]);
 
-  // Initialize spatial index
-  useEffect(() => {
-    if (viewRef.current) {
-      spatialIndexRef.current = new SpatialIndex();
-    }
-  }, [viewRef.current]);
-
-  // Use in your suggestion update effect
+  // FIXED: Actually update suggestions when specificEdits change
   useEffect(() => {
     if (viewRef.current && transformedSuggestions.length > 0) {
-      debouncedSetSuggestions(viewRef.current, transformedSuggestions);
+      try {
+        console.log('🎨 Suggestions updated:', transformedSuggestions.length);
+        console.log('🔍 About to call setSuggestions with:', transformedSuggestions);
+        
+        if (viewRef.current) {
+          console.log('✅ Editor view exists, calling setSuggestions');
+          setSuggestions(viewRef.current, transformedSuggestions);
+        } else {
+          console.log('❌ No editor view reference!');
+        }
+      } catch (error) {
+        console.error('❌ Suggestion update error:', error);
+      }
+    } else if (viewRef.current && transformedSuggestions.length === 0) {
+      // Clear suggestions when none provided
+      try {
+        setSuggestions(viewRef.current, []);
+        if (debug) console.log('🧹 Cleared all suggestions');
+      } catch (error) {
+        console.warn('Clear suggestions error:', error);
+      }
     }
-  }, [transformedSuggestions, debouncedSetSuggestions]);
-
-  // Add viewport tracking for cursor-aware rendering
-  useEffect(() => {
-    if (!viewRef.current) return;
-
-    const updateViewport = () => {
-      const view = viewRef.current;
-      const { from } = view.coordsAtPos(0);
-      const { to } = view.coordsAtPos(view.state.doc.content.size);
-      
-      setViewportRange({
-        start: from,
-        end: to,
-        visible: true
-      });
-    };
-
-    const throttledUpdate = throttle(updateViewport, 100);
-    const editorElement = viewRef.current.dom;
-    editorElement.addEventListener('scroll', throttledUpdate);
-    
-    updateViewport();
-
-    return () => {
-      editorElement.removeEventListener('scroll', throttledUpdate);
-    };
-  }, [viewRef.current]);
+  }, [transformedSuggestions, showHighlights, debug]);
 
   // Expose methods via ref for external control
   useImperativeHandle(ref, () => ({
