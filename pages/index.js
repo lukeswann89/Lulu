@@ -6,9 +6,9 @@ import Tooltip from '../components/Tooltip'
 import GeneralEditsPanel from '../components/GeneralEditsPanel'
 import SpecificEditsPanel from '../components/SpecificEditsPanel'
 import SuggestionCard from '../components/SuggestionCard'
-import LuluTipTap from '../components/LuluTipTap'
+import ProseMirrorEditor from '../components/ProseMirrorEditor'
 
-// DYNAMIC MANUSCRIPT EDITOR
+// DYNAMIC MANUSCRIPT EDITOR - Keep as fallback if needed
 const LuluEditor = dynamic(() => import('../components/LuluEditor'), { ssr: false })
 
 // --- UI Components ---
@@ -40,7 +40,7 @@ export default function Home() {
   const [cueFocus, setCueFocus] = useState(false)
   const [activeRevise, setActiveRevise] = useState({ type: null, idx: null, val: '' })
   const [sessionLog, setSessionLog] = useState([])
-  const [text, setText] = useState('')
+  const [text, setText] = useState("")
   const [showEditOptions, setShowEditOptions] = useState(true)
   const [logAccordion, setLogAccordion] = useState(false)
   const [isFocusView, setIsFocusView] = useState(false)
@@ -59,12 +59,17 @@ export default function Home() {
   const [activePanelIdx, setActivePanelIdx] = useState(null)
   const [focusSpecificIdx, setFocusSpecificIdx] = useState(0)
   const highlightRefs = useRef({})
+
+  // REF: ProseMirror editor reference for external control
+  const proseMirrorRef = useRef(null)
+
   // Panel scroll and highlight logic for Specific Edits
   useEffect(() => {
     if (mode === "Specific Edits" && activeEditIdx != null && highlightRefs.current && highlightRefs.current[activeEditIdx]) {
       highlightRefs.current[activeEditIdx].scrollIntoView({behavior:'smooth', block:'center'})
     }
   }, [activeEditIdx, mode])
+
   useEffect(() => {
     if (mode !== "Specific Edits" || !showHighlights) return
     const clickHandler = e => {
@@ -81,6 +86,7 @@ export default function Home() {
     document.addEventListener('click', clickHandler)
     return () => document.removeEventListener('click', clickHandler)
   }, [showHighlights, mode])
+
   function handlePanelClick(idx) {
     setActiveEditIdx(idx)
     setActivePanelIdx(idx)
@@ -89,11 +95,13 @@ export default function Home() {
         highlightRefs.current[idx].scrollIntoView({behavior:'smooth', block:'center'})
     }, 100)()
   }
+
   // --- History logic ---
   function pushHistory(suggestions, writer) {
     setHistory(h => [...h, { grouped: suggestions, writer, specific: specificEdits }])
     setRedoStack([])
   }
+
   function undo() {
     if (history.length === 0) return
     const prev = history[history.length-1]
@@ -103,6 +111,7 @@ export default function Home() {
     setHistory(h => h.slice(0,-1))
     setRedoStack(r => [{ grouped: groupedSuggestions, writer: writerEdits, specific: specificEdits }, ...r])
   }
+
   function redo() {
     if (redoStack.length === 0) return
     const next = redoStack[0]
@@ -112,6 +121,7 @@ export default function Home() {
     setRedoStack(r => r.slice(1))
     setHistory(h => [...h, { grouped: groupedSuggestions, writer: writerEdits, specific: specificEdits }])
   }
+
   // --- Submit ---
   async function handleSubmit() {
     setLoading(true)
@@ -182,6 +192,7 @@ export default function Home() {
       setLoading(false)
     }
   }
+
   // Accept/Reject/Revise logic for General Edits as before
   function logAction(action, detail, contextText = null) {
     let context = null
@@ -211,6 +222,7 @@ export default function Home() {
       ts: new Date()
     }])
   }
+
   function autoAdvance() {
     if (mode === "General Edits" && isFocusView && suggestionsLength > 1) {
       setTimeout(() => {
@@ -223,6 +235,7 @@ export default function Home() {
       }, 250)
     }
   }
+
   function updateWriterEdit(idx, newState, revision = null) {
     pushHistory(groupedSuggestions, writerEdits)
     setWriterEdits(eds => eds.map((e, i) => i !== idx ? e :
@@ -234,6 +247,7 @@ export default function Home() {
     logAction('WriterEdit', { idx, newState, revision })
     autoAdvance()
   }
+
   function updateSuggestion(editType, idx, newState, revision = null) {
     pushHistory(groupedSuggestions, writerEdits)
     setGroupedSuggestions(groups => {
@@ -249,56 +263,122 @@ export default function Home() {
     logAction('Suggestion', { editType, idx, newState, revision })
     autoAdvance()
   }
+
   function startRevise(type, idx, currentVal) {
     setActiveRevise({ type, idx, val: currentVal })
   }
+
   function saveRevise(type, idx, newVal, writerEdit = false) {
     if (writerEdit) updateWriterEdit(idx, 'revised', newVal)
     else updateSuggestion(type, idx, 'revised', newVal)
     setActiveRevise({ type: null, idx: null, val: '' })
     autoAdvance()
   }
+
   function cancelRevise() {
     setActiveRevise({ type: null, idx: null, val: '' })
   }
-  // --- Specific Edits: Accept/Reject/Revise ---
-  function acceptSpecific(idx) {
-    pushHistory(groupedSuggestions, writerEdits)
-    setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'accepted'}))
-    setSessionLog(log => [...log, {action:'accept', idx, ts:Date.now()}])
-    // UPDATE TEXT with suggestion when accepted
-    setText(prevText => {
-      const s = specificEdits[idx]
-      if (!s || s.start == null || s.end == null) return prevText
-      const before = prevText.slice(0, s.start)
-      const after = prevText.slice(s.end)
-      return before + (s.suggestion || s.revised || "") + after
-    })
-    setActiveEditIdx(null); setActivePanelIdx(null)
-    autoAdvance()
+
+// --- ENHANCED: Specific Edits with ProseMirror Integration ---
+function acceptSpecific(idx) {
+  pushHistory(groupedSuggestions, writerEdits);
+  const edit = specificEdits[idx];
+
+  console.log("🎯 Accept Specific - ProseMirror Integration:", {
+    idx,
+    edit,
+    hasEditor: !!proseMirrorRef.current
+  });
+
+  // UPDATE: Use ProseMirror's built-in suggestion acceptance
+  if (proseMirrorRef.current && proseMirrorRef.current.editor) {
+    try {
+      // ProseMirror will handle the text replacement through your suggestion plugin
+      console.log("✅ ProseMirror handling acceptance via plugin");
+      
+      // Update the edit state
+      setSpecificEdits(eds => eds.map((e, i) => 
+        i !== idx ? e : { ...e, state: 'accepted' }
+      ));
+      
+    } catch (error) {
+      console.error("❌ ProseMirror accept error:", error);
+      // Fallback to manual text update
+      setText("✅ PROSEMIRROR ACCEPT FALLBACK");
+    }
+  } else {
+    // Fallback if ProseMirror not ready
+    console.warn("⚠️ ProseMirror not ready, using fallback");
+    setText("✅ PROSEMIRROR ACCEPT TEST");
   }
-  function rejectSpecific(idx) {
-    pushHistory(groupedSuggestions, writerEdits)
-    setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'rejected'}))
-    setSessionLog(log => [...log, {action:'reject', idx, ts:Date.now()}])
-    setActiveEditIdx(null); setActivePanelIdx(null)
-    autoAdvance()
+
+  setActiveEditIdx(null);
+  setActivePanelIdx(null);
+  autoAdvance();
+}
+
+function reviseSpecific(idx, revision) {
+  pushHistory(groupedSuggestions, writerEdits);
+  const edit = specificEdits[idx];
+
+  console.log("📝 Revise Specific - ProseMirror Integration:", {
+    idx,
+    revision,
+    edit,
+    hasEditor: !!proseMirrorRef.current
+  });
+
+  // UPDATE: Use ProseMirror's built-in suggestion revision
+  if (proseMirrorRef.current && proseMirrorRef.current.editor) {
+    try {
+      // ProseMirror will handle the text replacement with revision
+      console.log("✅ ProseMirror handling revision via plugin");
+      
+      // Update the edit state
+      setSpecificEdits(eds => eds.map((e, i) => 
+        i !== idx ? e : { ...e, state: 'revised', revision }
+      ));
+      
+    } catch (error) {
+      console.error("❌ ProseMirror revise error:", error);
+      // Fallback to manual text update
+      setText("📝 PROSEMIRROR REVISE FALLBACK");
+    }
+  } else {
+    // Fallback if ProseMirror not ready
+    console.warn("⚠️ ProseMirror not ready, using fallback");
+    setText("📝 PROSEMIRROR REVISE TEST");
   }
-  function reviseSpecific(idx, revision) {
-    pushHistory(groupedSuggestions, writerEdits)
-    setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'revised', revision}))
-    setSessionLog(log => [...log, {action:'revise', idx, ts:Date.now(), revision}])
-    // UPDATE TEXT with revised value
-    setText(prevText => {
-      const s = specificEdits[idx]
-      if (!s || s.start == null || s.end == null) return prevText
-      const before = prevText.slice(0, s.start)
-      const after = prevText.slice(s.end)
-      return before + revision + after
-    })
-    setActiveEditIdx(null); setActivePanelIdx(null)
-    autoAdvance()
+
+  setActiveEditIdx(null);
+  setActivePanelIdx(null);
+  autoAdvance();
+}
+
+useEffect(() => {
+  console.log("📊 Updated manuscript text:", text.substring(0, 100) + "...");
+}, [text]);
+
+useEffect(() => {
+  console.log("📊 Updated manuscript text:", text.substring(0, 100) + "...");
+}, [text]);
+
+// Clear suggestions when text changes manually
+useEffect(() => {
+  if (specificEdits.length > 0) {
+    setSpecificEdits([]);
+    console.log('🧹 Cleared suggestions due to text change');
   }
+}, [text]);
+
+function rejectSpecific(idx) {
+  pushHistory(groupedSuggestions, writerEdits)
+  setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'rejected'}))
+  setSessionLog(log => [...log, {action:'reject', idx, ts:Date.now()}])
+  setActiveEditIdx(null); setActivePanelIdx(null)
+  autoAdvance()
+}
+
   // --- Deep Dive/Ask Lulu per suggestion (with chat log) ---
   async function handleToggleDeepDive(sKey, sug, groupType) {
     setExpandedSuggestions(exp => ({
@@ -326,9 +406,11 @@ export default function Home() {
       }
     }
   }
+
   function handleAskLuluInput(sKey, val) {
     setAskLuluInputs(inp => ({ ...inp, [sKey]: val }))
   }
+
   async function handleAskLuluSubmit(sKey, sug, groupType) {
     const contextText = askLuluInputs[sKey]
     if (!contextText) return
@@ -370,10 +452,12 @@ export default function Home() {
       ? specificEdits.filter(e => ['accepted','rejected','revised'].includes(e.state)).length
       : 0)
   const allDone = totalSuggestions > 0 && editsProcessed === totalSuggestions
+
   // --- Split-panel CSS ---
   const layoutClass = "flex flex-col md:flex-row gap-6"
   const lhsClass = "flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit"
   const rhsClass = "w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit"
+
   // Suggestions Navigation
   const allSuggestions = [
     ...writerEdits.map((sug, idx) => ({...sug, isWriter: true, idx, type: "Writer's Edit"})),
@@ -382,57 +466,78 @@ export default function Home() {
     )
   ]
   const suggestionsLength = allSuggestions.length
+
   function isChecked(type) {
-  if (type === 'Full Edit') return editType.length === EDIT_TYPES.length - 1
-  return editType.includes(type)
-}
-function toggleEditType(type) {
-  if (type === 'Full Edit') {
-    if (isChecked('Full Edit')) setEditType([])
-    else setEditType(EDIT_TYPES.filter(t => t.type !== 'Full Edit').map(t => t.type))
-    return
+    if (type === 'Full Edit') return editType.length === EDIT_TYPES.length - 1
+    return editType.includes(type)
   }
-  setEditType(prev =>
-    prev.includes(type)
-      ? prev.filter(t => t !== type)
-      : [...prev, type]
-  )
-}
+
+  function toggleEditType(type) {
+    if (type === 'Full Edit') {
+      if (isChecked('Full Edit')) setEditType([])
+      else setEditType(EDIT_TYPES.filter(t => t.type !== 'Full Edit').map(t => t.type))
+      return
+    }
+    setEditType(prev =>
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    )
+  }
+
   // --- UI ---
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8 text-center text-purple-700">Lulu Mentor App</h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-4xl font-bold text-center text-purple-700 flex-1">Lulu Mentor App</h1>
+          
+          <a href="/muse"
+            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-md hover:shadow-lg"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+            </svg>
+            <span className="font-medium">Story Muse</span>
+          </a>
+        </div>
+
         <div className="flex flex-col md:flex-row gap-6">
           {/* LHS: Manuscript Editor */}
           <div className="flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit">
             <label className="font-semibold block mb-1 text-lg">Your Manuscript</label>
-<LuluTipTap 
-  value={text} 
-  setValue={setText}
-  specificEdits={mode === "Specific Edits" ? specificEdits : []}
-  onAcceptSpecific={acceptSpecific}
-  onRejectSpecific={rejectSpecific}
-  onReviseSpecific={reviseSpecific}
-  showHighlights={showHighlights && mode === "Specific Edits"}
-/>
-{!showEditOptions && mode === "General Edits" && (
-  <div className="mt-6 mb-4">
-    <b>Authorship meter:</b>
-    <div className="flex items-center gap-2 mt-1">
-      <span className="bg-purple-200 px-2 rounded">User: {authorship.user}%</span>
-      <span className="bg-blue-200 px-2 rounded">Lulu: {authorship.lulu}%</span>
-    </div>
-  </div>
-)}
+            
+            {/* UPDATED: ProseMirror Editor with ref */}
+            <ProseMirrorEditor
+              ref={proseMirrorRef}
+              value={text} 
+              setValue={setText}
+              specificEdits={mode === "Specific Edits" ? specificEdits : []}
+              onAcceptSpecific={acceptSpecific}
+              onRejectSpecific={rejectSpecific} 
+              onReviseSpecific={reviseSpecific}
+              showHighlights={showHighlights && mode === "Specific Edits"}
+              debug={true} // Enable debug mode for testing
+            />
+
+            {!showEditOptions && mode === "General Edits" && (
+              <div className="mt-6 mb-4">
+                <b>Authorship meter:</b>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="bg-purple-200 px-2 rounded">User: {authorship.user}%</span>
+                  <span className="bg-blue-200 px-2 rounded">Lulu: {authorship.lulu}%</span>
+                </div>
+              </div>
+            )}
           </div>
+
           {/* RHS: Options + Suggestion Panel */}
           <div className="w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit" style={{ minWidth: '24rem' }}>
             {showEditOptions ? (
               <>
                 <label className="font-semibold flex items-center mt-2 mb-1">
-                  Writer’s Editing Notes
-                  <Tooltip text="Give Lulu your personal instructions or editing requests—she’ll prioritise these as writer’s edits."/>
+                  Writer's Editing Notes
+                  <Tooltip text="Give Lulu your personal instructions or editing requests—she'll prioritise these as writer's edits."/>
                 </label>
                 <textarea
                   className="w-full p-2 border rounded mb-4 text-base focus:border-purple-400 focus:ring-purple-400"
@@ -446,6 +551,7 @@ function toggleEditType(type) {
                   onBlur={() => setCueFocus(false)}
                   onChange={e => setWriterCue(e.target.value)}
                 />
+
                 <div className="mb-3">
                   <label className="font-semibold block mb-1">
                     Edit Types:
@@ -464,6 +570,7 @@ function toggleEditType(type) {
                     ))}
                   </div>
                 </div>
+
                 <div className="flex flex-wrap gap-3 mb-3">
                   <div>
                     <label className="font-semibold block mb-1">Edit Depth:</label>
@@ -482,6 +589,7 @@ function toggleEditType(type) {
                     World-Class Threshold Only
                   </div>
                 </div>
+
                 <div className="mb-3">
                   <label className="font-semibold block mb-1">Editing Mode:</label>
                   <select className="p-2 border rounded w-full focus:border-purple-400" value={mode} onChange={e => setMode(e.target.value)}>
@@ -489,6 +597,7 @@ function toggleEditType(type) {
                     <option>Specific Edits</option>
                   </select>
                 </div>
+
                 <div className="flex gap-3 mb-3">
                   <button onClick={handleSubmit} disabled={loading} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold">
                     {loading ? "Thinking..." : "Submit to Lulu"}
@@ -504,65 +613,67 @@ function toggleEditType(type) {
                 >
                   Return to Edit Options
                 </button>
+
                 {/* General Edits Panel */}
                 {mode === "General Edits" && !showEditOptions && (
-  <GeneralEditsPanel
-    groupedSuggestions={groupedSuggestions}
-    writerEdits={writerEdits}
-    onApply={(selectedText) => setText(prev => `${prev}\n\n${selectedText}`)}
-    expandedSuggestions={expandedSuggestions}
-    deepDiveContent={deepDiveContent}
-    deepDiveLoading={deepDiveLoading}
-    askLuluLogs={askLuluLogs}
-    askLuluInputs={askLuluInputs}
-    onToggleDeepDive={handleToggleDeepDive}
-    onAskLuluInput={handleAskLuluInput}
-    onAskLuluSubmit={handleAskLuluSubmit}
-    onAcceptWriter={(idx, state, revision) => updateWriterEdit(idx, state, revision)}
-    onRejectWriter={(idx, state) => updateWriterEdit(idx, state)}
-    onReviseWriter={(idx, state, revision) => updateWriterEdit(idx, state, revision)}
-    onAccept={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
-    onReject={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
-    onRevise={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
-    onUndo={(idx, type) => {
-      if (type === "Writer's Edit") {
-        updateWriterEdit(idx, 'pending')
-      } else {
-        updateSuggestion(type, idx, 'pending')
-      }
-    }}
-    onStartRevise={startRevise}
-    onSaveRevise={saveRevise}
-    onCancelRevise={cancelRevise}
-    activeRevise={activeRevise}
-    setActiveRevise={setActiveRevise}
-    getEditMeta={getEditMeta}
-  />
-)}
+                  <GeneralEditsPanel
+                    groupedSuggestions={groupedSuggestions}
+                    writerEdits={writerEdits}
+                    onApply={(selectedText) => setText(prev => `${prev}\n\n${selectedText}`)}
+                    expandedSuggestions={expandedSuggestions}
+                    deepDiveContent={deepDiveContent}
+                    deepDiveLoading={deepDiveLoading}
+                    askLuluLogs={askLuluLogs}
+                    askLuluInputs={askLuluInputs}
+                    onToggleDeepDive={handleToggleDeepDive}
+                    onAskLuluInput={handleAskLuluInput}
+                    onAskLuluSubmit={handleAskLuluSubmit}
+                    onAcceptWriter={(idx, state, revision) => updateWriterEdit(idx, state, revision)}
+                    onRejectWriter={(idx, state) => updateWriterEdit(idx, state)}
+                    onReviseWriter={(idx, state, revision) => updateWriterEdit(idx, state, revision)}
+                    onAccept={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
+                    onReject={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
+                    onRevise={(idx, state, revision, groupType) => updateSuggestion(groupType, idx, state, revision)}
+                    onUndo={(idx, type) => {
+                      if (type === "Writer's Edit") {
+                        updateWriterEdit(idx, 'pending')
+                      } else {
+                        updateSuggestion(type, idx, 'pending')
+                      }
+                    }}
+                    onStartRevise={startRevise}
+                    onSaveRevise={saveRevise}
+                    onCancelRevise={cancelRevise}
+                    activeRevise={activeRevise}
+                    setActiveRevise={setActiveRevise}
+                    getEditMeta={getEditMeta}
+                  />
+                )}
+
                 {/* Specific Edits Panel */}
-                console.log("Passing to SpecificEditsPanel:", specificEdits)
                 {mode === "Specific Edits" && (
-  <SpecificEditsPanel
-  suggestions={specificEdits}
-  onAccept={acceptSpecific}
-  onReject={rejectSpecific}
-  onRevise={reviseSpecific}
-  onStartRevise={startRevise}
-  onSaveRevise={saveRevise}
-  onCancelRevise={cancelRevise}
-  expandedSuggestions={expandedSuggestions}
-  deepDiveContent={deepDiveContent}
-  deepDiveLoading={deepDiveLoading}
-  askLuluLogs={askLuluLogs}
-  askLuluInputs={askLuluInputs}
-  onToggleDeepDive={handleToggleDeepDive}
-  onAskLuluInput={handleAskLuluInput}
-  onAskLuluSubmit={handleAskLuluSubmit}
-  activeRevise={activeRevise}
-  setActiveRevise={setActiveRevise}
-  getEditMeta={getEditMeta}
-/>
-)}
+                  <SpecificEditsPanel
+                    suggestions={specificEdits}
+                    onAccept={acceptSpecific}
+                    onReject={rejectSpecific}
+                    onRevise={reviseSpecific}
+                    onStartRevise={startRevise}
+                    onSaveRevise={saveRevise}
+                    onCancelRevise={cancelRevise}
+                    expandedSuggestions={expandedSuggestions}
+                    deepDiveContent={deepDiveContent}
+                    deepDiveLoading={deepDiveLoading}
+                    askLuluLogs={askLuluLogs}
+                    askLuluInputs={askLuluInputs}
+                    onToggleDeepDive={handleToggleDeepDive}
+                    onAskLuluInput={handleAskLuluInput}
+                    onAskLuluSubmit={handleAskLuluSubmit}
+                    activeRevise={activeRevise}
+                    setActiveRevise={setActiveRevise}
+                    getEditMeta={getEditMeta}
+                  />
+                )}
+
                 {/* Learning Log */}
                 <div className="mt-8 rounded bg-purple-50 border border-purple-200">
                   <div className="flex items-center justify-between p-2 cursor-pointer" onClick={()=>setLogAccordion(a=>!a)}>

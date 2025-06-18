@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ensureGroupedSuggestions } from '../utils/suggestionUtils';
 
 // Shared container component that provides Overview/Focus View functionality
 // Used by both GeneralEditsPanel and SpecificEditsPanel
@@ -15,16 +16,21 @@ export default function EditModeContainer({
   const [focusIndex, setFocusIndex] = useState(0);
   const [selected, setSelected] = useState({}); // For General Edits selection
 
+  // Defensive: always ensure correct grouped shape for General Edits
+  const safeSuggestions = (mode === "General Edits")
+    ? ensureGroupedSuggestions(suggestions)
+    : suggestions;
+
   // Calculate total suggestions
-  const allSuggestions = Array.isArray(suggestions)
-    ? suggestions
-    : Object.values(suggestions).flat();
+  const allSuggestions = Array.isArray(safeSuggestions)
+    ? safeSuggestions
+    : Object.values(safeSuggestions).flat();
   const suggestionsLength = allSuggestions.length;
 
   // FIX: Properly detect truly empty for both arrays and grouped objects
-  const isTrulyEmpty = Array.isArray(suggestions)
-    ? suggestions.length === 0
-    : Object.values(suggestions).flat().length === 0;
+  const isTrulyEmpty = Array.isArray(safeSuggestions)
+    ? safeSuggestions.length === 0
+    : Object.values(safeSuggestions).every(arr => Array.isArray(arr) && arr.length === 0);
 
   // Check if all edits are processed
   const editsProcessed = allSuggestions.filter(s =>
@@ -44,7 +50,9 @@ export default function EditModeContainer({
       .filter(([_, isChecked]) => isChecked)
       .map(([key]) => {
         const [type, index] = key.split('::');
-        return suggestions[type]?.[parseInt(index)];
+        return Array.isArray(safeSuggestions[type])
+          ? safeSuggestions[type][parseInt(index)]
+          : undefined;
       })
       .filter(Boolean)
       .map(item => `• ${item.recommendation || item.suggestion}`);
@@ -110,7 +118,7 @@ export default function EditModeContainer({
         <>
           {/* Overview Mode - Show all suggestions grouped */}
           {renderSuggestionCard({
-            suggestions,
+            suggestions: safeSuggestions,
             selected,
             onToggleSelect: toggleSelection,
             mode

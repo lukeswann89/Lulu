@@ -1,0 +1,206 @@
+/* /styles/prosemirror.css */
+/* Complete ProseMirror styling with working highlight colors */
+
+/* Basic ProseMirror Editor Styles */
+.prosemirror-editor .ProseMirror {
+  outline: none;
+  min-height: 300px;
+  padding: 12px;
+  font-family: ui-serif, Georgia, Cambria, serif;
+  font-size: 16px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.prosemirror-editor .ProseMirror:focus {
+  outline: 2px solid #a78bfa;
+  outline-offset: -2px;
+}
+
+/* =================================================================
+   ACTUAL WORKING SUGGESTION HIGHLIGHTS - MATCHES PLUGIN CLASSES
+   ================================================================= */
+
+/* Base suggestion highlight class that the plugin applies */
+.suggestion-highlight {
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  border-radius: 3px !important;
+  padding: 1px 2px !important;
+  position: relative !important;
+}
+
+/* Developmental Edits - Purple */
+.suggestion-highlight.developmental {
+  background-color: rgba(147, 51, 234, 0.2) !important;
+  border-bottom: 2px solid #9333ea !important;
+}
+
+.suggestion-highlight.developmental:hover {
+  background-color: rgba(147, 51, 234, 0.3) !important;
+  border-bottom-color: #7c3aed !important;
+}
+
+/* Structural Edits - Blue */
+.suggestion-highlight.structural {
+  background-color: rgba(59, 130, 246, 0.2) !important;
+  border-bottom: 2px solid #3b82f6 !important;
+}
+
+.suggestion-highlight.structural:hover {
+  background-color: rgba(59, 130, 246, 0.3) !important;
+  border-bottom-color: #2563eb !important;
+}
+
+/* Line Edits - Green */
+.suggestion-highlight.line {
+  background-color: rgba(34, 197, 94, 0.2) !important;
+  border-bottom: 2px solid #22c55e !important;
+}
+
+.suggestion-highlight.line:hover {
+  background-color: rgba(34, 197, 94, 0.3) !important;
+  border-bottom-color: #16a34a !important;
+}
+
+/* Copy Edits - Red */
+.suggestion-highlight.copy {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+  border-bottom: 2px solid #ef4444 !important;
+}
+
+.suggestion-highlight.copy:hover {
+  background-color: rgba(239, 68, 68, 0.3) !important;
+  border-bottom-color: #dc2626 !important;
+}
+
+/* Proof Edits - Gray */
+.suggestion-highlight.proof {
+  background-color: rgba(107, 114, 128, 0.2) !important;
+  border-bottom: 2px solid #6b7280 !important;
+}
+
+.suggestion-highlight.proof:hover {
+  background-color: rgba(107, 114, 128, 0.3) !important;
+  border-bottom-color: #4b5563 !important;
+}
+
+/* General hover effect for all suggestions */
+.suggestion-highlight:hover {
+  opacity: 0.9 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+/* =================================================================
+   LEGACY SUGGESTION STYLES (keeping for backward compatibility)
+   ================================================================= */
+
+/* Suggestion Highlight Styles */
+.lulu-suggestion {
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  position: relative;
+}
+
+.lulu-suggestion:hover {
+  opacity: 0.8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.lulu-suggestion.active {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+/* ADDED: Working highlight colors for your demo */
+.lulu-suggestion { 
+  background-color: #fef3c7 !important; 
+  border: 2px solid #f59e0b !important; 
+}
+
+.lulu-grammar { 
+  background-color: #fecaca !important; 
+  border: 2px solid #ef4444 !important; 
+}
+
+.lulu-style { 
+  background-color: #bfdbfe !important; 
+  border: 2px solid #3b82f6 !important; 
+}
+
+.lulu-structure { 
+  background-color: #d8b4fe !important; 
+  border: 2px solid #8b5cf6 !important; 
+}
+
+/* Suggestion State Indicators */
+.lulu-suggestion[data-state="accepted"] {
+  background-color: #d1fae5 !important;
+  border-color: #10b981;
+}
+
+.lulu-suggestion[data-state="rejected"] {
+  background-color: #fee2e2 !important;
+  border-color: #ef4444;
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.lulu-suggestion[data-state="revised"] {
+  background-color: #fef3c7 !important;
+  border-color: #f59e0b;
+}
+
+/* Edit Type Colors */
+.suggestion-developmental { background-color: #fed7aa; }
+.suggestion-structural { background-color: #d1fae5; }
+.suggestion-line { background-color: #ffe29b; }
+.suggestion-copy { background-color: #fecaca; }
+.suggestion-proof { background-color: #e0e7ff; }
+.suggestion-voice { background-color: #f3e8ff; }
+.suggestion-content { background-color: #fde68a; }
+.suggestion-cut { background-color: #fee2e2; }
+
+/* Loading and Error States */
+.prosemirror-loading {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.prosemirror-error {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+/* Performance Optimizations */
+.prosemirror-editor {
+  contain: layout style paint;
+}
+
+.lulu-suggestion {
+  will-change: background-color, border-color, transform;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .prosemirror-editor .ProseMirror {
+    font-size: 14px;
+    padding: 8px;
+  }
+  
+  .lulu-suggestion {
+    padding: 1px 2px;
+    margin: 0;
+  }
+}

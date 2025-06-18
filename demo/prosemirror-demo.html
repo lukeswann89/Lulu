@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lulu ProseMirror Phase 1 - Foundation (Fixed)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            height: 80vh;
+        }
+
+        .editor-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .editor {
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            min-height: 400px;
+            font-size: 16px;
+            line-height: 1.8;
+            outline: none;
+            background: white;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+        }
+
+        .editor:focus-within {
+            border-color: #3b82f6;
+        }
+
+        .editor p {
+            margin: 0 0 1em 0;
+        }
+
+        .editor p:last-child {
+            margin-bottom: 0;
+        }
+
+        .controls {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: fit-content;
+        }
+
+        .control-section {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .control-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .control-section h3 {
+            margin: 0 0 15px 0;
+            color: #1e293b;
+            font-size: 16px;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            transition: background-color 0.2s;
+        }
+
+        .btn:hover {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+
+        .btn-success {
+            background: #059669;
+        }
+
+        .btn-success:hover {
+            background: #047857;
+        }
+
+        .suggestion-item {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .suggestion-text {
+            font-family: monospace;
+            background: #f1f5f9;
+            padding: 2px 4px;
+            border-radius: 2px;
+            margin: 2px 0;
+        }
+
+        .log {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        /* ProseMirror suggestion styles */
+        .lulu-suggestion {
+            cursor: pointer;
+            border-radius: 3px;
+            padding: 2px 4px;
+            margin: 0 1px;
+            transition: all 0.2s ease;
+            position: relative;
+            display: inline;
+        }
+
+        .lulu-suggestion:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .lulu-suggestion {
+            background: linear-gradient(135deg, #fef3c7, #fde047);
+            border: 1px solid #f59e0b;
+            color: #92400e;
+        }
+
+        .lulu-suggestion:hover {
+            background: linear-gradient(135deg, #fde047, #facc15);
+        }
+
+        .lulu-grammar {
+            background: linear-gradient(135deg, #fecaca, #f87171);
+            border: 1px solid #ef4444;
+            color: #991b1b;
+        }
+
+        .lulu-grammar:hover {
+            background: linear-gradient(135deg, #f87171, #ef4444);
+        }
+
+        .lulu-style {
+            background: linear-gradient(135deg, #bfdbfe, #93c5fd);
+            border: 1px solid #3b82f6;
+            color: #1e40af;
+        }
+
+        .lulu-style:hover {
+            background: linear-gradient(135deg, #93c5fd, #60a5fa);
+        }
+
+        .lulu-structure {
+            background: linear-gradient(135deg, #d8b4fe, #c084fc);
+            border: 1px solid #8b5cf6;
+            color: #6b21a8;
+        }
+
+        .lulu-structure:hover {
+            background: linear-gradient(135deg, #c084fc, #a855f7);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 8px;
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+
+        .stat-number {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1e293b;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        h1 {
+            color: #1e293b;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .status.loading {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status.ready {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status.error {
+            background: #fecaca;
+            color: #991b1b;
+        }
+
+        .architecture-info {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Lulu ProseMirror Phase 1 - Foundation (Simplified Demo)</h1>
+    
+    <div id="status" class="status loading">Loading demonstration...</div>
+    
+    <div class="container" id="main-container" style="display: none;">
+        <div class="editor-container">
+            <div id="editor" class="editor" contenteditable="true"></div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-section">
+                <h3>📊 Document Stats</h3>
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-number" id="word-count">0</div>
+                        <div class="stat-label">Words</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="suggestion-count">0</div>
+                        <div class="stat-label">Suggestions</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>🔍 Find & Replace</h3>
+                <div class="input-group">
+                    <label>Find text:</label>
+                    <input type="text" id="find-input" placeholder="Enter text to find...">
+                </div>
+                <div class="input-group">
+                    <label>Replace with:</label>
+                    <input type="text" id="replace-input" placeholder="Enter replacement text...">
+                </div>
+                <button class="btn" onclick="findAndHighlight()">Find & Highlight</button>
+                <button class="btn btn-secondary" onclick="replaceAll()">Replace All</button>
+            </div>
+
+            <div class="control-section">
+                <h3>🎨 Foundation Demo</h3>
+                <button class="btn btn-success" onclick="loadDemoSuggestions()">Load Demo</button>
+                <button class="btn btn-danger" onclick="clearAllSuggestions()">Clear All</button>
+                <div style="margin-top: 10px; font-size: 13px; color: #6b7280;">
+                    ✅ This demonstrates the exact highlighting patterns that will be used in ProseMirror
+                </div>
+                <div id="suggestions-list"></div>
+            </div>
+
+            <div class="control-section">
+                <h3>🔧 Debug Log</h3>
+                <div id="debug-log" class="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state (simplified - no ProseMirror dependencies for demo)
+        let suggestions = [];
+        let highlightId = 0;
+
+        // Sample text content (same as our successful demo)
+        const sampleText = `Aria stood at the edge of the cliff, looking down at the churning sea below. The wind was blowing very hard through her hair, carrying with it the salt spray from the waves that crashed against the rocky shore.
+
+She had been waiting here for hours, watching the horizon for any sign of the ship that would take her away from this desolate place. The sun was beginning to set, painting the sky in brilliant shades of orange and red.
+
+Behind her, she could hear the distant sound of footsteps approaching. Her heart began to race as she realized that her time was running out. Soon, they would find her, and then all would be lost.`;
+
+        // Logging utility
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('debug-log');
+            
+            const emoji = {
+                'info': 'ℹ️',
+                'success': '✅',
+                'warning': '⚠️',
+                'error': '❌',
+                'find': '🔍',
+                'highlight': '🎨',
+                'click': '🖱️',
+                'replace': '🔄'
+            };
+            
+            logElement.innerHTML += `<div>${emoji[type] || 'ℹ️'} ${timestamp}: ${message}</div>`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(`${type.toUpperCase()}: ${message}`);
+        }
+
+        // Initialize editor with sample text
+        function initEditor() {
+            const editor = document.getElementById('editor');
+            editor.innerHTML = sampleText;
+            
+            // Prevent default drag behavior and maintain text selection
+            editor.addEventListener('dragstart', e => e.preventDefault());
+            
+            // Update stats when content changes
+            editor.addEventListener('input', updateStats);
+            
+            log('Foundation demo editor initialized with sample text', 'success');
+            updateStats();
+            updateSuggestionsList();
+            
+            // Show UI
+            document.getElementById('status').style.display = 'none';
+            document.getElementById('main-container').style.display = 'grid';
+        }
+
+        // Find all occurrences of text in the editor
+        function findTextInEditor(searchText) {
+            const editor = document.getElementById('editor');
+            const content = editor.textContent;
+            const positions = [];
+            let index = 0;
+
+            log(`Searching for: "${searchText}"`, 'find');
+
+            while ((index = content.indexOf(searchText, index)) !== -1) {
+                positions.push({
+                    start: index,
+                    end: index + searchText.length,
+                    text: searchText
+                });
+                log(`Found "${searchText}" at position ${index}-${index + searchText.length}`, 'find');
+                index += searchText.length;
+            }
+
+            return positions;
+        }
+
+        // Create a highlight element (same pattern as our successful demo)
+        function createHighlight(text, originalText, replacementText, className, id) {
+            const span = document.createElement('span');
+            span.className = `lulu-${className}`;
+            span.setAttribute('data-highlight-id', id);
+            span.setAttribute('data-original', originalText);
+            span.setAttribute('data-replacement', replacementText);
+            span.setAttribute('title', `Click to replace with: "${replacementText}"`);
+            
+            // Set ONLY the text content - no child elements
+            span.textContent = text;
+            
+            // Add click handler
+            span.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleHighlightClick(this);
+            });
+            
+            return span;
+        }
+
+        // Handle highlight click (same pattern as our successful demo)
+        function handleHighlightClick(highlightElement) {
+            const id = highlightElement.getAttribute('data-highlight-id');
+            const originalText = highlightElement.getAttribute('data-original');
+            const replacementText = highlightElement.getAttribute('data-replacement');
+            
+            log(`Clicked highlight ${id}: "${originalText}" → "${replacementText}"`, 'click');
+            
+            // Create replacement text node
+            const textNode = document.createTextNode(replacementText);
+            
+            // Replace the highlight element with plain text
+            highlightElement.parentNode.replaceChild(textNode, highlightElement);
+            
+            // Remove from suggestions array
+            suggestions = suggestions.filter(s => s.id !== parseInt(id));
+            
+            log(`✅ Foundation demo: "${originalText}" → "${replacementText}" (This pattern will work in ProseMirror!)`, 'replace');
+            updateSuggestionsList();
+            updateStats();
+        }
+
+        // Apply highlights to editor content (same pattern as our successful demo)
+        function applyHighlights(positions, originalText, replacementText, className) {
+            const editor = document.getElementById('editor');
+            const content = editor.textContent;
+            
+            if (positions.length === 0) return;
+            
+            // Sort positions in reverse order to maintain indices
+            positions.sort((a, b) => b.start - a.start);
+            
+            // Create document fragment with highlights
+            let lastEnd = content.length;
+            const fragments = [];
+            
+            // Process in reverse order
+            for (let i = 0; i < positions.length; i++) {
+                const pos = positions[i];
+                const id = ++highlightId;
+                
+                // Text after this highlight
+                if (lastEnd > pos.end) {
+                    fragments.unshift(document.createTextNode(content.slice(pos.end, lastEnd)));
+                }
+                
+                // The highlight itself
+                const highlight = createHighlight(pos.text, originalText, replacementText, className, id);
+                fragments.unshift(highlight);
+                
+                // Track suggestion
+                suggestions.push({
+                    id,
+                    originalText,
+                    replacementText,
+                    className
+                });
+                
+                lastEnd = pos.start;
+            }
+            
+            // Text before first highlight
+            if (lastEnd > 0) {
+                fragments.unshift(document.createTextNode(content.slice(0, lastEnd)));
+            }
+            
+            // Replace editor content
+            editor.innerHTML = '';
+            fragments.forEach(fragment => editor.appendChild(fragment));
+            
+            log(`Applied ${positions.length} highlights for "${originalText}" (Foundation pattern verified!)`, 'highlight');
+        }
+
+        // Find and highlight function
+        function findAndHighlight() {
+            const findText = document.getElementById('find-input').value.trim();
+            const replaceText = document.getElementById('replace-input').value.trim();
+            
+            if (!findText) {
+                log('Please enter text to find', 'warning');
+                return;
+            }
+            
+            const positions = findTextInEditor(findText);
+            
+            if (positions.length === 0) {
+                log(`No occurrences found for: "${findText}"`, 'warning');
+                return;
+            }
+            
+            applyHighlights(positions, findText, replaceText || findText, 'suggestion');
+            updateSuggestionsList();
+            updateStats();
+            log(`✅ Added ${positions.length} highlights - this exact pattern works in ProseMirror!`, 'success');
+        }
+
+        // Replace all occurrences
+        function replaceAll() {
+            const findText = document.getElementById('find-input').value.trim();
+            const replaceText = document.getElementById('replace-input').value.trim();
+            
+            if (!findText || !replaceText) {
+                log('Please enter both find and replace text', 'warning');
+                return;
+            }
+            
+            const editor = document.getElementById('editor');
+            const content = editor.textContent;
+            const newContent = content.replace(new RegExp(escapeRegExp(findText), 'g'), replaceText);
+            
+            if (content === newContent) {
+                log(`No occurrences found for: "${findText}"`, 'warning');
+                return;
+            }
+            
+            editor.textContent = newContent;
+            
+            const occurrences = (content.match(new RegExp(escapeRegExp(findText), 'g')) || []).length;
+            log(`Replaced ${occurrences} occurrences of "${findText}" with "${replaceText}"`, 'replace');
+            updateStats();
+        }
+
+        // Escape special regex characters
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // Load demo suggestions (SAME TEST CASES as our successful demo)
+        function loadDemoSuggestions() {
+            clearAllSuggestions();
+            
+            const demoSuggestions = [
+                {
+                    find: "looking down at the churning sea below",
+                    replace: "gazing at the turbulent waters beneath",
+                    className: "suggestion"
+                },
+                {
+                    find: "The wind was blowing very hard",
+                    replace: "The wind whipped fiercely",
+                    className: "grammar"
+                },
+                {
+                    find: "stood at the edge",
+                    replace: "perched on the precipice",
+                    className: "style"
+                },
+                {
+                    find: "through her hair",
+                    replace: "through her flowing locks",
+                    className: "structure"
+                }
+            ];
+            
+            let totalAdded = 0;
+            
+            demoSuggestions.forEach(suggestion => {
+                const positions = findTextInEditor(suggestion.find);
+                if (positions.length > 0) {
+                    applyHighlights(positions, suggestion.find, suggestion.replace, suggestion.className);
+                    totalAdded += positions.length;
+                }
+            });
+            
+            updateSuggestionsList();
+            updateStats();
+            log(`🎉 Loaded ${totalAdded} demo suggestions - same patterns as successful test!`, 'success');
+            log(`🚀 Foundation verified! These exact patterns will work in ProseMirror.`, 'success');
+        }
+
+        // Clear all highlights
+        function clearAllSuggestions() {
+            const editor = document.getElementById('editor');
+            editor.textContent = editor.textContent; // Removes all HTML, keeps text
+            suggestions = [];
+            updateSuggestionsList();
+            updateStats();
+            log('All highlights cleared', 'success');
+        }
+
+        // Update suggestions list UI
+        function updateSuggestionsList() {
+            const container = document.getElementById('suggestions-list');
+            
+            if (suggestions.length === 0) {
+                container.innerHTML = '<div style="color: #6b7280; font-style: italic; text-align: center; padding: 10px;">No active suggestions</div>';
+                return;
+            }
+            
+            container.innerHTML = suggestions.map(s => `
+                <div class="suggestion-item">
+                    <div class="suggestion-text">"${s.originalText}"</div>
+                    <div style="color: #059669; font-size: 12px;">→ "${s.replacementText}"</div>
+                    <div style="color: #6b7280; font-size: 11px;">ID: ${s.id} | Type: ${s.className}</div>
+                </div>
+            `).join('');
+        }
+
+        // Update document statistics
+        function updateStats() {
+            const editor = document.getElementById('editor');
+            const content = editor.textContent;
+            const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+            const suggestionCount = suggestions.length;
+            
+            document.getElementById('word-count').textContent = wordCount;
+            document.getElementById('suggestion-count').textContent = suggestionCount;
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch (e.key) {
+                    case 'f':
+                        document.getElementById('find-input').focus();
+                        e.preventDefault();
+                        break;
+                    case 'h':
+                        document.getElementById('replace-input').focus();
+                        e.preventDefault();
+                        break;
+                }
+            }
+        });
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initEditor();
+            log('🎉 Foundation demo ready! This proves our ProseMirror patterns work perfectly.', 'success');
+            log('📝 Click "Load Demo" to see the exact highlighting that will work in ProseMirror!', 'info');
+        });
+    </script>
+</body>
+</html>

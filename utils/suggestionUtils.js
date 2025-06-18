@@ -1,7 +1,3 @@
-// /utils/suggestionUtils.js
-
-import { getEditMeta } from './editorConfig';
-
 export function debounce(fn, ms) {
   let timer; 
   return (...args) => {
@@ -58,4 +54,28 @@ export function realignSuggestions(text, suggestions) {
     }
     return sug;
   });
+}
+
+// NEW: Defensive utility to ensure grouped suggestion structure
+export function ensureGroupedSuggestions(suggestions) {
+  if (
+    suggestions &&
+    typeof suggestions === 'object' &&
+    !Array.isArray(suggestions) &&
+    Object.values(suggestions).every(val => Array.isArray(val))
+  ) {
+    return suggestions; // Already correct
+  }
+  // If it's an array, group by editType
+  if (Array.isArray(suggestions)) {
+    const grouped = {};
+    suggestions.forEach(item => {
+      if (!item.editType) return;
+      if (!grouped[item.editType]) grouped[item.editType] = [];
+      grouped[item.editType].push(item);
+    });
+    return grouped;
+  }
+  // Else, return empty grouped object
+  return {};
 }

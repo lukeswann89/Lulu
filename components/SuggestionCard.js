@@ -1,7 +1,29 @@
-// /components/SuggestionCard.jsx
+import React from 'react'
 
-import React from 'react';
-import { generateSuggestionTitle, getShortWhy } from '../utils/titleGenerator';
+// Helper function to generate short title from suggestion text
+function generateShortTitle(text) {
+  if (!text) return 'Untitled Suggestion';
+  
+  // Remove quotes and clean up text
+  const cleanText = text.replace(/^["']|["']$/g, '').trim();
+  
+  // Split into words and take first 3-7 words
+  const words = cleanText.split(/\s+/);
+  const shortTitle = words.slice(0, Math.min(7, words.length)).join(' ');
+  
+  // Add ellipsis if truncated
+  return words.length > 7 ? `${shortTitle}...` : shortTitle;
+}
+
+// Helper function to get short why (first ~15 words)
+function getShortWhy(why) {
+  if (!why) return '';
+  
+  const words = why.split(/\s+/);
+  if (words.length <= 15) return why;
+  
+  return words.slice(0, 15).join(' ') + '...';
+}
 
 // Unified SuggestionCard for both General and Specific Edits
 export default function SuggestionCard({
@@ -38,20 +60,15 @@ export default function SuggestionCard({
 
   // Determine display content based on mode
   const isSpecificMode = mode === "Specific Edits";
-  const isWriterEdit = sug.isWriter || groupType === "Writer's Edit";
+  const isWriterEdit = sug.isWriter;
   const mainText = isSpecificMode 
     ? sug.suggestion 
-    : (isWriterEdit ? (sug.lulu || sug.own) : (sug.recommendation || sug.suggestion));
+    : (isWriterEdit ? (sug.lulu || sug.own) : sug.recommendation);
 
-  // Generate intelligent title
-  const cardTitle = sug.title || generateSuggestionTitle(
-    mainText, 
-    sug.why, 
-    groupType, 
-    sug.original
-  );
+  // Generate or use provided title
+  const cardTitle = sug.title || generateShortTitle(mainText);
   
-  // Get short version of why for main card (full version in deep dive)
+  // Get short version of why for main card
   const shortWhy = getShortWhy(sug.why);
   
   // Priority styling for ALL cards
@@ -61,68 +78,34 @@ export default function SuggestionCard({
     Low: { text: 'text-gray-500', bg: 'bg-gray-100', icon: '⚪' }
   };
 
-  const priorityStyle = (priority || sug.priority) ? priorityColors[priority || sug.priority] : null;
+  const priorityStyle = priority || sug.priority ? priorityColors[priority || sug.priority] : null;
 
-  // Handle actions with auto-advance and proper card closure
-  const handleAccept = () => {
-    if (isWriterEdit) {
-      // Writer's Edit has different signature - (idx, state, revision)
-      onAccept(idx, 'accepted');
-    } else if (isSpecificMode) {
-      // Specific Edits - (idx)
-      onAccept(idx);
-    } else {
-      // General Edits - (idx, state, revision, groupType)
-      onAccept(idx, 'accepted', null, groupType);
-    }
-    
+  // Handle actions with auto-advance
+  const handleAccept = (...args) => {
+    onAccept(...args);
     if (autoAdvance) {
       setTimeout(() => autoAdvance(), 250);
     }
   };
 
-  const handleReject = () => {
-    if (isWriterEdit) {
-      onReject(idx, 'rejected');
-    } else if (isSpecificMode) {
-      onReject(idx);
-    } else {
-      onReject(idx, 'rejected', null, groupType);
-    }
-    
+  const handleReject = (...args) => {
+    onReject(...args);
     if (autoAdvance) {
       setTimeout(() => autoAdvance(), 250);
     }
   };
 
-  const handleRevise = () => {
-    if (isWriterEdit) {
-      onStartRevise('writer', idx, sug.lulu || sug.own);
-    } else {
-      onStartRevise(groupType, idx, mainText);
-    }
-  };
-
-  const handleUseOwnForWriter = () => {
-    // For Writer's Edit "Keep Own" button
-    onAccept(idx, 'accepted', sug.own);
+  const handleRevise = (...args) => {
+    onRevise(...args);
     if (autoAdvance) {
       setTimeout(() => autoAdvance(), 250);
     }
   };
 
-  const handleAcceptLuluForWriter = () => {
-    // For Writer's Edit "Accept Lulu's Edit" button
-    onAccept(idx, 'accepted', sug.lulu);
-    if (autoAdvance) {
-      setTimeout(() => autoAdvance(), 250);
-    }
-  };
-
-  // If collapsed, show minimal view with working undo
+  // If collapsed, show minimal view
   if (collapsed) {
     return (
-      <div className="border rounded p-3 mb-2 bg-gray-50 opacity-75">
+      <div className={`border rounded p-3 mb-2 bg-gray-50 opacity-75`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {priorityStyle && (
@@ -190,76 +173,51 @@ export default function SuggestionCard({
             <span className="text-sm text-blue-700">{mainText}</span>
           </div>
 
-          {/* Short Why (first ~12 words only) */}
+          {/* Short Why (first ~15 words only) */}
           {shortWhy && (
             <div className="text-sm text-purple-700 italic mb-3">
               <span className="font-medium">Why: </span>{shortWhy}
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-2 mb-2">
-            {isWriterEdit ? (
-              <>
-                <button 
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs"
-                  onClick={handleUseOwnForWriter}
-                >
-                  Keep Own
-                </button>
-                <button 
-                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
-                  onClick={handleAcceptLuluForWriter}
-                >
-                  Accept Lulu's Edit
-                </button>
-                <button 
-                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
-                  onClick={handleReject}
-                >
-                  Reject
-                </button>
-                <button 
-                  className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs"
-                  onClick={handleRevise}
-                >
-                  Revise
-                </button>
-              </>
-            ) : (
-              <>
-                <button 
-                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
-                  onClick={handleAccept}
-                >
-                  Accept
-                </button>
-                <button 
-                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
-                  onClick={handleReject}
-                >
-                  Reject
-                </button>
-                <button 
-                  className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs"
-                  onClick={handleRevise}
-                >
-                  Revise
-                </button>
-              </>
-            )}
+          {/* Action Buttons and Deep Dive */}
+          <div>
+            {/* Action Buttons (only show if not collapsed) */}
+            <div className="flex gap-2 mb-2">
+              {isWriterEdit ? (
+                <>
+                  <button className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs"
+                    onClick={() => handleAccept(sug.idx, 'accepted')}>Keep Own</button>
+                  <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
+  onClick={() => handleAccept(idx)}>Accept</button>
+<button className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
+  onClick={() => handleReject(idx)}>Reject</button>
+                  <button className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs"
+  onClick={() => onStartRevise(idx)}>Revise</button>
+                </>
+              ) : (
+                <>
+                  <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
+                    onClick={() => handleAccept(idx, 'accepted')}>Accept</button>
+                  <button className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
+                    onClick={() => handleReject(idx, 'rejected')}>Reject</button>
+                  <button className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs"
+                    onClick={() => onStartRevise(sug.type || groupType, idx, sug.suggestion || sug.recommendation)}>Revise</button>
+                </>
+              )}
+            </div>
+
+            {/* Deep Dive Button */}
+            <button
+              className="text-xs px-2 py-1 bg-purple-100 rounded text-purple-800 hover:bg-purple-200"
+              onClick={() => onToggleDeepDive(sKey, sug, groupType)}
+            >
+              {expanded ? '- Deep Dive' : '+ Deep Dive'}
+            </button>
           </div>
 
-          {/* Deep Dive Button */}
-          <button
-            className="text-xs px-2 py-1 bg-purple-100 rounded text-purple-800 hover:bg-purple-200 mb-2"
-            onClick={() => onToggleDeepDive(sKey, sug, groupType)}
-          >
-            {expanded ? '- Deep Dive' : '+ Deep Dive'}
-          </button>
-
           {/* Revise Form */}
-          {activeRevise?.type === (isWriterEdit ? 'writer' : groupType) && activeRevise?.idx === idx && (
+          {activeRevise?.type === (isWriterEdit ? 'writer' : (sug.type || groupType)) && activeRevise?.idx === idx && (
             <div className="mt-3">
               <textarea
                 className="w-full p-2 border rounded text-sm"
@@ -269,23 +227,15 @@ export default function SuggestionCard({
                 placeholder="Enter your revision..."
               />
               <div className="flex gap-2 mt-2">
-                <button 
-                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
+                <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
                   onClick={() => {
-                    onSaveRevise(groupType, idx, activeRevise.val, isWriterEdit);
+                    onSaveRevise(sug.type || groupType, idx, activeRevise.val, isWriterEdit);
                     if (autoAdvance) {
                       setTimeout(() => autoAdvance(), 250);
                     }
-                  }}
-                >
-                  Save
-                </button>
-                <button 
-                  className="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1 rounded text-xs"
-                  onClick={onCancelRevise}
-                >
-                  Cancel
-                </button>
+                  }}>Save</button>
+                <button className="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1 rounded text-xs"
+                  onClick={onCancelRevise}>Cancel</button>
               </div>
             </div>
           )}
@@ -351,5 +301,5 @@ export default function SuggestionCard({
         </div>
       </div>
     </div>
-  );
+  )
 }
