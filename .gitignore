@@ -22,3 +22,7 @@ Thumbs.db
 # Others
 *.log
 *.exe
+*.exe
+*.msi
+*.dmg
+CursorUserSetup*
