@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
 const editOptions = [
   { 
@@ -201,7 +200,7 @@ export function EditingControls({
       >
         {isAnalyzing ? (
           <span className="flex items-center justify-center">
-            <Loader2 className="animate-spin mr-2" size={20} />
+            <span className="animate-spin mr-2">⟳</span>
             Analyzing Manuscript...
           </span>
         ) : (

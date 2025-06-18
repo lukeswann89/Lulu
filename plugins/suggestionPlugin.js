@@ -17,34 +17,42 @@ let globalSuggestionId = 1;
 class PositionMapper {
   static mapCharacterToDoc(doc, charPos) {
     if (charPos < 0) return null;
-    
-    let currentChar = 0;
-    let result = null;
+    let mappedPos = -1;
+    let charCounter = 0;
 
-    doc.descendants((node, pos) => {
-      if (result !== null) return false; // Early exit when found
+    for (let i = 0; i < doc.childCount; i++) {
+        const pNode = doc.child(i);
+        if (i > 0) charCounter++; // Account for newline separator
 
-      if (node.isText) {
-        const nodeStart = currentChar;
-        const nodeEnd = currentChar + node.textContent.length;
+        const pNodeTextLength = pNode.textContent.length;
+        
+        // Check if the character position is within the current paragraph node
+        if (charPos <= charCounter + pNodeTextLength) {
+            const offsetInP = charPos - charCounter;
+            
+            let textOffsetInP = 0;
+            pNode.descendants((textNode, textNodePos) => {
+                if (!textNode.isText) return true; // Continue descending
+                if (mappedPos !== -1) return false; // Stop once found
 
-        // Character position is within this text node
-        if (charPos >= nodeStart && charPos <= nodeEnd) {
-          const offsetInNode = charPos - nodeStart;
-          result = pos + 1 + offsetInNode; // +1 for node boundary
-          return false; // Stop traversal
+                const textNodeLen = textNode.textContent.length;
+                if (offsetInP <= textOffsetInP + textNodeLen) {
+                    const offsetInTextNode = offsetInP - textOffsetInP;
+                    mappedPos = textNodePos + 1 + offsetInTextNode;
+                    return false; // Stop descending
+                }
+                textOffsetInP += textNodeLen;
+            });
+
+            if (mappedPos !== -1) return mappedPos;
         }
-
-        currentChar = nodeEnd;
-      }
-    });
-
-    // Handle end-of-document position
-    if (result === null && charPos === currentChar) {
-      result = doc.content.size;
+        charCounter += pNodeTextLength;
     }
+    
+    // Handle position at the very end of the document
+    if (charPos === charCounter) return doc.content.size;
 
-    return result;
+    return null;
   }
 
   static validateCharacterRange(doc, startChar, endChar) {
