@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 
 // Helper function to generate short title from suggestion text
 function generateShortTitle(text) {
@@ -56,6 +56,9 @@ export default function SuggestionCard({
   onToggleSelect = null, // For General Edits selection
   autoAdvance = null, // Function to auto-advance to next suggestion
 }) {
+  const [isHovered, setIsHovered] = useState(false);
+  const isEditing = activeRevise && activeRevise.type === groupType && activeRevise.idx === idx;
+
   if (!sug) return null;
 
   // Determine display content based on mode
@@ -102,6 +105,16 @@ export default function SuggestionCard({
     }
   };
 
+  const handleAction = (action, value) => {
+    if (action === 'accept') onAccept(sug.id);
+    else if (action === 'reject') onReject(sug.id);
+    else if (action === 'revise') onRevise(sug.id);
+    else if (action === 'undo') onUndo(groupType, idx);
+    else if (action === 'startRevise') onStartRevise(groupType, idx, sug.lulu || sug.recommendation || sug.suggestion);
+    else if (action === 'saveRevise') onSaveRevise(groupType, idx, value);
+    else if (action === 'cancelRevise') onCancelRevise();
+  };
+
   // If collapsed, show minimal view
   if (collapsed) {
     return (
@@ -120,7 +133,7 @@ export default function SuggestionCard({
           </div>
           <button 
             className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-xs border border-purple-300 hover:bg-purple-200"
-            onClick={() => onUndo(idx, groupType)}
+            onClick={() => onUndo(groupType, idx)}
           >
             Undo
           </button>
@@ -187,22 +200,22 @@ export default function SuggestionCard({
               {isWriterEdit ? (
                 <>
                   <button className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs"
-                    onClick={() => handleAccept(sug.idx, 'accepted')}>Keep Own</button>
+                    onClick={() => handleAccept(sug.id, 'accepted')}>Keep Own</button>
                   <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
-  onClick={() => handleAccept(idx)}>Accept</button>
-<button className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
-  onClick={() => handleReject(idx)}>Reject</button>
+                    onClick={() => handleAccept(sug.id)}>Accept</button>
+                  <button className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
+                    onClick={() => handleReject(sug.id)}>Reject</button>
                   <button className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs"
-  onClick={() => onStartRevise(idx)}>Revise</button>
+                    onClick={() => onStartRevise(sug.type || groupType, sug.id, sug.suggestion || sug.recommendation)}>Revise</button>
                 </>
               ) : (
                 <>
                   <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
-                    onClick={() => handleAccept(idx, 'accepted')}>Accept</button>
+                    onClick={() => handleAccept(sug.id, 'accepted')}>Accept</button>
                   <button className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
-                    onClick={() => handleReject(idx, 'rejected')}>Reject</button>
+                    onClick={() => handleReject(sug.id, 'rejected')}>Reject</button>
                   <button className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs"
-                    onClick={() => onStartRevise(sug.type || groupType, idx, sug.suggestion || sug.recommendation)}>Revise</button>
+                    onClick={() => onStartRevise(sug.type || groupType, sug.id, sug.suggestion || sug.recommendation)}>Revise</button>
                 </>
               )}
             </div>
@@ -229,7 +242,7 @@ export default function SuggestionCard({
               <div className="flex gap-2 mt-2">
                 <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
                   onClick={() => {
-                    onSaveRevise(sug.type || groupType, idx, activeRevise.val, isWriterEdit);
+                    onSaveRevise(sug.type || groupType, sug.id, activeRevise.val, isWriterEdit);
                     if (autoAdvance) {
                       setTimeout(() => autoAdvance(), 250);
                     }

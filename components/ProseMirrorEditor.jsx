@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 import { EditorView } from "prosemirror-view";
 import { EditorState } from "prosemirror-state";
 import { luluSchema } from "../schemas/luluSchema";
-import { suggestionPlugin, setSuggestions } from "../plugins/suggestionPlugin"; // FIXED: Import setSuggestions
+import { createSuggestionPlugin, setSuggestions, acceptSuggestion as pmAcceptSuggestion } from "../plugins/suggestionPlugin";
 import { createDocFromText, docToText } from "../utils/prosemirrorHelpers";
 import { SuggestionManager } from "../utils/suggestionManager";
 
@@ -42,6 +42,7 @@ const ProseMirrorIntegration = forwardRef(({
   const viewRef = useRef(null);
   const suggestionManagerRef = useRef(null);
   const lastContentRef = useRef("");
+  const initialContentSet = useRef(false);
 
   // Transform specificEdits to match your ProseMirror foundation format
   const transformedSuggestions = specificEdits
@@ -69,17 +70,31 @@ const ProseMirrorIntegration = forwardRef(({
 
   // Initialize ProseMirror editor
   useEffect(() => {
-    if (typeof window === "undefined" || editorRef.current === null) return;
+    if (typeof window === "undefined" || editorRef.current === null || viewRef.current) return;
 
     try {
+      const handleAccept = (suggestionId) => {
+        console.log('✅ PROSEMIRROR ACCEPT TEST - ID:', suggestionId);
+        
+        // Call the parent component's handler
+        onAcceptSpecific(suggestionId);
+        
+        // Tell ProseMirror to perform the replacement
+        if (viewRef.current) {
+          pmAcceptSuggestion(viewRef.current, suggestionId);
+        }
+      };
+
       // Create initial document
       const doc = createDocFromText(luluSchema, value || "");
+      lastContentRef.current = value || "";
+      initialContentSet.current = true;
       
       // Create editor state with your proven plugin
       const state = EditorState.create({
         doc,
         plugins: [
-          suggestionPlugin // Your plugin is already configured
+          createSuggestionPlugin({ onAccept: handleAccept }) // Use the factory
         ]
       });
 
@@ -90,14 +105,12 @@ const ProseMirrorIntegration = forwardRef(({
           const newState = view.state.apply(transaction);
           view.updateState(newState);
           
-          // Update parent component when content changes
+          // Update parent component ONLY when content changes via ProseMirror
           if (transaction.docChanged) {
             const newContent = docToText(newState.doc);
-            if (newContent !== lastContentRef.current) {
-              lastContentRef.current = newContent;
-              setValue(newContent);
-              if (debug) console.log('📝 Content updated via transaction');
-            }
+            lastContentRef.current = newContent; // Keep PM state as source of truth
+            setValue(newContent); // Inform parent of the change
+            if (debug) console.log('📝 Content updated via transaction');
           }
         }
       });
@@ -139,59 +152,32 @@ const ProseMirrorIntegration = forwardRef(({
         delete window.luluProseMirror;
       }
     };
-  }, []); // Only run once on mount
+  }, [onAcceptSpecific, debug, setValue]); // Dependencies for initialization
 
-  // Update content when value prop changes
+  // Update content ONLY when value prop changes from an external source
   useEffect(() => {
     if (viewRef.current && value !== lastContentRef.current) {
-      try {
-        const currentContent = docToText(viewRef.current.state.doc);
-        if (value !== currentContent) {
-          if (debug) {
-            console.log('🔄 Syncing content:', {
-              incoming: value.substring(0, 100) + '...',
-              current: currentContent.substring(0, 100) + '...'
-            });
-          }
-          
-          const newDoc = createDocFromText(luluSchema, value);
-          const newState = EditorState.create({
-            doc: newDoc,
-            plugins: viewRef.current.state.plugins
-          });
-          
-          viewRef.current.updateState(newState);
-          lastContentRef.current = value;
-        }
-      } catch (error) {
-        console.warn('Content sync error:', error);
+      if (debug) {
+        console.log('🔄 Syncing external content change to ProseMirror');
       }
+      
+      const { state } = viewRef.current;
+      const newDoc = createDocFromText(luluSchema, value);
+      const tr = state.tr.replaceWith(0, state.doc.content.size, newDoc.content);
+      
+      viewRef.current.dispatch(tr);
+      lastContentRef.current = value;
     }
   }, [value, debug]);
 
   // FIXED: Actually update suggestions when specificEdits change
   useEffect(() => {
-    if (viewRef.current && transformedSuggestions.length > 0) {
+    if (viewRef.current) {
       try {
-        console.log('🎨 Suggestions updated:', transformedSuggestions.length);
-        console.log('🔍 About to call setSuggestions with:', transformedSuggestions);
-        
-        if (viewRef.current) {
-          console.log('✅ Editor view exists, calling setSuggestions');
-          setSuggestions(viewRef.current, transformedSuggestions);
-        } else {
-          console.log('❌ No editor view reference!');
-        }
+        if (debug) console.log('🎨 Applying suggestions to ProseMirror:', transformedSuggestions.length);
+        setSuggestions(viewRef.current, transformedSuggestions);
       } catch (error) {
         console.error('❌ Suggestion update error:', error);
-      }
-    } else if (viewRef.current && transformedSuggestions.length === 0) {
-      // Clear suggestions when none provided
-      try {
-        setSuggestions(viewRef.current, []);
-        if (debug) console.log('🧹 Cleared all suggestions');
-      } catch (error) {
-        console.warn('Clear suggestions error:', error);
       }
     }
   }, [transformedSuggestions, showHighlights, debug]);
@@ -207,7 +193,7 @@ const ProseMirrorIntegration = forwardRef(({
           plugins: viewRef.current.state.plugins
         });
         viewRef.current.updateState(newState);
-        setValue(content);
+        // Do NOT call setValue here, let the transaction dispatcher handle it
       }
     },
     loadDemoSuggestions: () => {

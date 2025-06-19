@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { debounce, highlightManuscript, findAllPositions, realignSuggestions } from '../utils/suggestionUtils'
 import { EDIT_TYPES, EDIT_DEPTHS, PROFILES, EDIT_TYPE_TOOLTIP, getEditMeta } from '../utils/editorConfig'
+import { acceptSuggestion } from '../plugins/suggestionPlugin'
 import Tooltip from '../components/Tooltip'
 import GeneralEditsPanel from '../components/GeneralEditsPanel'
 import SpecificEditsPanel from '../components/SpecificEditsPanel'
@@ -176,9 +177,13 @@ export default function Home() {
         pushHistory(roadmapGroups, writerEditGroup)
         setSessionLog([])
       } else if (mode === "Specific Edits") {
-        // Specific Edits array
-        setSpecificEdits((data.suggestions || []).map(s => ({...s, state:'pending'})))
-        console.log("Set specificEdits to:", data.suggestions)
+        const suggestionsWithIds = (data.suggestions || []).map((s, i) => ({
+            ...s,
+            state: 'pending',
+            id: `specific_${i}_${Date.now()}`
+        }));
+        setSpecificEdits(suggestionsWithIds);
+        console.log("Set specificEdits to:", suggestionsWithIds)
         setAuthorship({ user: 100, lulu: 0 })
         pushHistory({}, [])
         setSessionLog([])
@@ -193,23 +198,24 @@ export default function Home() {
     }
   }
 
-  // Accept/Reject/Revise logic for General Edits as before
   function logAction(action, detail, contextText = null) {
     let context = null
-    if (action === 'Suggestion' || action === 'WriterEdit') {
-      const sugObj = action === 'WriterEdit'
-        ? writerEdits[detail.idx]
-        : (groupedSuggestions[detail.editType] || [])[detail.idx]
-      
-      if (sugObj) {
-        const mainContent = sugObj.lulu || sugObj.own || sugObj.recommendation || ''
-        const title = sugObj.title || generateShortTitle(mainContent)
-        const actionType = detail.newState.charAt(0).toUpperCase() + detail.newState.slice(1)
-        const editType = detail.editType || "Writer's Edit"
-        const timestamp = new Date().toLocaleTimeString()
-        
-        context = `${actionType}: '${title}' (${editType}) at ${timestamp}${detail.revision ? ` - Revised to: "${detail.revision}"` : ''}`
-      }
+    if (action === 'Suggestion' || action === 'WriterEdit' || action === 'SpecificEdit') {
+        const sugObj = action === 'WriterEdit' 
+            ? writerEdits[detail.idx]
+            : action === 'Suggestion'
+                ? (groupedSuggestions[detail.editType] || [])[detail.idx]
+                : specificEdits.find(e => e.id === detail.id);
+
+        if (sugObj) {
+            const mainContent = sugObj.lulu || sugObj.own || sugObj.recommendation || sugObj.suggestion || '';
+            const title = sugObj.title || generateShortTitle(mainContent);
+            const actionType = detail.newState.charAt(0).toUpperCase() + detail.newState.slice(1);
+            const editType = detail.editType || sugObj.editType || "Writer's Edit";
+            const timestamp = new Date().toLocaleTimeString();
+
+            context = `${actionType}: '${title}' (${editType}) at ${timestamp}${detail.revision ? ` - Revised to: "${detail.revision}"` : ''}`;
+        }
     } else if (action === 'Ask Lulu') {
       context = `Q: ${detail.revision} → A: ${detail.newState}`
     }
@@ -250,15 +256,14 @@ export default function Home() {
 
   function updateSuggestion(editType, idx, newState, revision = null) {
     pushHistory(groupedSuggestions, writerEdits)
-    setGroupedSuggestions(groups => {
-      const arr = groups[editType] || []
-      return {
-        ...groups,
-        [editType]: arr.map((s, i) => i !== idx ? s : { ...s, state: newState, revision: revision ?? s.revision })
-      }
-    })
-    if (newState === 'accepted') setAuthorship(a => ({ ...a, lulu: Math.min(100, a.lulu+5), user: Math.max(0, a.user-5) }))
-    if (newState === 'rejected') setAuthorship(a => ({ ...a, user: a.user, lulu: a.lulu }))
+    setGroupedSuggestions(sugs => ({
+      ...sugs,
+      [editType]: (sugs[editType] || []).map((s,i) => i !== idx ? s :
+        { ...s, state: newState, revision: revision ?? s.revision }
+      )
+    }))
+    if (newState === 'accepted') setAuthorship(a => ({ ...a, user: a.user, lulu: Math.min(100, a.lulu+5) }))
+    if (newState === 'rejected') setAuthorship(a => ({ ...a, user: Math.max(0, a.user-5), lulu: a.lulu }))
     setActiveRevise({ type: null, idx: null, val: '' })
     logAction('Suggestion', { editType, idx, newState, revision })
     autoAdvance()
@@ -267,117 +272,97 @@ export default function Home() {
   function startRevise(type, idx, currentVal) {
     setActiveRevise({ type, idx, val: currentVal })
   }
-
   function saveRevise(type, idx, newVal, writerEdit = false) {
     if (writerEdit) updateWriterEdit(idx, 'revised', newVal)
     else updateSuggestion(type, idx, 'revised', newVal)
-    setActiveRevise({ type: null, idx: null, val: '' })
-    autoAdvance()
   }
-
   function cancelRevise() {
     setActiveRevise({ type: null, idx: null, val: '' })
   }
 
-// --- ENHANCED: Specific Edits with ProseMirror Integration ---
-function acceptSpecific(idx) {
-  pushHistory(groupedSuggestions, writerEdits);
-  const edit = specificEdits[idx];
-
-  console.log("🎯 Accept Specific - ProseMirror Integration:", {
-    idx,
-    edit,
-    hasEditor: !!proseMirrorRef.current
-  });
-
-  // UPDATE: Use ProseMirror's built-in suggestion acceptance
-  if (proseMirrorRef.current && proseMirrorRef.current.editor) {
-    try {
-      // ProseMirror will handle the text replacement through your suggestion plugin
-      console.log("✅ ProseMirror handling acceptance via plugin");
-      
-      // Update the edit state
-      setSpecificEdits(eds => eds.map((e, i) => 
-        i !== idx ? e : { ...e, state: 'accepted' }
-      ));
-      
-    } catch (error) {
-      console.error("❌ ProseMirror accept error:", error);
-      // Fallback to manual text update
-      setText("✅ PROSEMIRROR ACCEPT FALLBACK");
+  // 🚀 FIXED: Accept/Reject/Revise Functions with PROPER ref debugging
+  function acceptSpecific(id) {
+    console.log(`🎯 Accept Specific - ID: ${id}`);
+    
+    // 🔍 DEBUG: Let's see what the ref actually contains
+    console.log('🔍 Debug proseMirrorRef:', proseMirrorRef.current);
+    if (proseMirrorRef.current) {
+      console.log('🔍 Available properties:', Object.keys(proseMirrorRef.current));
     }
-  } else {
-    // Fallback if ProseMirror not ready
-    console.warn("⚠️ ProseMirror not ready, using fallback");
-    setText("✅ PROSEMIRROR ACCEPT TEST");
-  }
-
-  setActiveEditIdx(null);
-  setActivePanelIdx(null);
-  autoAdvance();
-}
-
-function reviseSpecific(idx, revision) {
-  pushHistory(groupedSuggestions, writerEdits);
-  const edit = specificEdits[idx];
-
-  console.log("📝 Revise Specific - ProseMirror Integration:", {
-    idx,
-    revision,
-    edit,
-    hasEditor: !!proseMirrorRef.current
-  });
-
-  // UPDATE: Use ProseMirror's built-in suggestion revision
-  if (proseMirrorRef.current && proseMirrorRef.current.editor) {
-    try {
-      // ProseMirror will handle the text replacement with revision
-      console.log("✅ ProseMirror handling revision via plugin");
-      
-      // Update the edit state
-      setSpecificEdits(eds => eds.map((e, i) => 
-        i !== idx ? e : { ...e, state: 'revised', revision }
-      ));
-      
-    } catch (error) {
-      console.error("❌ ProseMirror revise error:", error);
-      // Fallback to manual text update
-      setText("📝 PROSEMIRROR REVISE FALLBACK");
+    
+    // ✅ FIXED: Try multiple possible ref structures
+    let view = null;
+    if (proseMirrorRef.current?.editor) {
+      view = proseMirrorRef.current.editor;
+      console.log('✅ Found editor via proseMirrorRef.current.editor');
+    } else if (proseMirrorRef.current?.view) {
+      view = proseMirrorRef.current.view;
+      console.log('✅ Found editor via proseMirrorRef.current.view');
+    } else if (window.luluProseMirror?.view) {
+      view = window.luluProseMirror.view;
+      console.log('✅ Found editor via window.luluProseMirror.view');
     }
-  } else {
-    // Fallback if ProseMirror not ready
-    console.warn("⚠️ ProseMirror not ready, using fallback");
-    setText("📝 PROSEMIRROR REVISE TEST");
+    
+    if (view) {
+      try {
+        // ✅ FIXED: Use imported function with correct view
+        acceptSuggestion(view, id);
+        
+        // Update the state of the suggestion in the side panel
+        setSpecificEdits(edits =>
+          edits.map(edit =>
+            edit.id === id ? { ...edit, state: 'accepted' } : edit
+          )
+        );
+        logAction('SpecificEdit', { id, newState: 'accepted' });
+        console.log(`✅ Successfully accepted suggestion ${id}`);
+      } catch (error) {
+        console.error(`❌ Error accepting suggestion ${id}:`, error);
+      }
+    } else {
+      console.error("❌ ProseMirror editor not available to accept suggestion.");
+      console.error("❌ Available refs:", {
+        proseMirrorRefCurrent: proseMirrorRef.current,
+        globalDebug: window.luluProseMirror
+      });
+    }
+  }
+  
+  function rejectSpecific(id) {
+    console.log(`🎯 Reject Specific - ID: ${id}`);
+    
+    // Update the state of the suggestion in the side panel (no ProseMirror action needed for reject)
+    setSpecificEdits(edits =>
+      edits.map(edit =>
+        edit.id === id ? { ...edit, state: 'rejected' } : edit
+      )
+    );
+    logAction('SpecificEdit', { id, newState: 'rejected' });
+    console.log(`✅ Successfully rejected suggestion ${id}`);
   }
 
-  setActiveEditIdx(null);
-  setActivePanelIdx(null);
-  autoAdvance();
-}
-
-useEffect(() => {
-  console.log("📊 Updated manuscript text:", text.substring(0, 100) + "...");
-}, [text]);
-
-useEffect(() => {
-  console.log("📊 Updated manuscript text:", text.substring(0, 100) + "...");
-}, [text]);
-
-// Clear suggestions when text changes manually
-useEffect(() => {
-  if (specificEdits.length > 0) {
-    setSpecificEdits([]);
-    console.log('🧹 Cleared suggestions due to text change');
+  function reviseSpecific(id) {
+    console.log(`🎯 Revise Specific - ID: ${id}`);
+    
+    const originalSuggestion = specificEdits.find(e => e.id === id);
+    if (!originalSuggestion) {
+      console.error("Could not find suggestion to revise.");
+      return;
+    }
+    
+    const newSuggestionText = prompt("Revise suggestion:", originalSuggestion.suggestion);
+    
+    if (newSuggestionText && newSuggestionText !== originalSuggestion.suggestion) {
+        setSpecificEdits(edits =>
+            edits.map(edit =>
+                edit.id === id ? { ...edit, suggestion: newSuggestionText, state: 'revised' } : edit
+            )
+        );
+        logAction('SpecificEdit', { id, newState: 'revised', revision: newSuggestionText });
+        console.log(`✅ Successfully revised suggestion ${id}`);
+        alert("Revision saved in panel. The original highlight will remain until you re-submit for new suggestions.");
+    }
   }
-}, [text]);
-
-function rejectSpecific(idx) {
-  pushHistory(groupedSuggestions, writerEdits)
-  setSpecificEdits(eds => eds.map((e,i) => i !== idx ? e : {...e, state:'rejected'}))
-  setSessionLog(log => [...log, {action:'reject', idx, ts:Date.now()}])
-  setActiveEditIdx(null); setActivePanelIdx(null)
-  autoAdvance()
-}
 
   // --- Deep Dive/Ask Lulu per suggestion (with chat log) ---
   async function handleToggleDeepDive(sKey, sug, groupType) {
@@ -512,7 +497,7 @@ function rejectSpecific(idx) {
               ref={proseMirrorRef}
               value={text} 
               setValue={setText}
-              specificEdits={mode === "Specific Edits" ? specificEdits : []}
+              specificEdits={mode === "Specific Edits" ? specificEdits.filter(e => !e.state || e.state === "pending") : []}
               onAcceptSpecific={acceptSpecific}
               onRejectSpecific={rejectSpecific} 
               onReviseSpecific={reviseSpecific}

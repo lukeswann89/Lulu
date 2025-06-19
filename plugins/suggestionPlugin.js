@@ -7,8 +7,8 @@ import { Decoration, DecorationSet } from 'prosemirror-view';
 // Plugin key for suggestion state
 export const suggestionPluginKey = new PluginKey('suggestions');
 
-// Global ID counter for unique suggestion tracking
-let globalSuggestionId = 1;
+// Keep track of suggestions by their original ID from the backend
+// let globalSuggestionId = 1; // No longer needed for this logic
 
 /**
  * BUILT-IN POSITION MAPPER
@@ -202,6 +202,29 @@ class EnhancedSuggestionState {
           suggestions = result.suggestions;
           break;
           
+        case 'acceptSuggestion': {
+          const { suggestionId } = action;
+          const suggestion = this.suggestions.find(s => s.id === suggestionId);
+          if (!suggestion) return this;
+
+          // Apply the replacement
+          const { from, to, replacement } = suggestion;
+          tr.replaceWith(from, to, tr.doc.type.schema.text(replacement));
+
+          // Remove the accepted suggestion's decoration
+          const decorationToRemove = this.decorations.find(from, to, spec => spec['data-suggestion-id'] === suggestionId);
+          if (decorationToRemove.length) {
+            decorations = this.decorations.remove(decorationToRemove);
+          }
+          
+          // Filter out the accepted suggestion from state
+          suggestions = this.suggestions.filter(s => s.id !== suggestionId);
+
+          // Map remaining decorations
+          decorations = decorations.map(tr.mapping, tr.doc);
+          break;
+        }
+
         case 'addSuggestion':
           const addResult = this.handleAddSuggestion(action, tr.doc);
           if (addResult) {
@@ -219,11 +242,14 @@ class EnhancedSuggestionState {
         case 'clearAll':
           decorations = DecorationSet.empty;
           suggestions = [];
-          globalSuggestionId = 1;
+          // globalSuggestionId = 1;
           console.log('🧹 Cleared all suggestions');
           break;
       }
     }
+    
+    // Make sure to map decorations on any transaction
+    decorations = decorations.map(tr.mapping, tr.doc);
     
     return new EnhancedSuggestionState(decorations, suggestions);
   }
@@ -232,7 +258,7 @@ class EnhancedSuggestionState {
     console.log('🎯 Processing suggestions with built-in position mapping...');
     
     // Reset state
-    globalSuggestionId = 1;
+    // globalSuggestionId = 1;
     
     // Step 1: Map character positions to ProseMirror positions
     console.log('📍 Mapping character positions to ProseMirror positions');
@@ -274,8 +300,9 @@ class EnhancedSuggestionState {
     const suggestions = [];
     
     for (const suggestionData of finalSuggestions) {
+      // IMPORTANT: Use the ID from the incoming data, not a global counter
       const suggestion = {
-        id: globalSuggestionId++,
+        id: suggestionData.id, 
         from: suggestionData.proseMirrorStart,
         to: suggestionData.proseMirrorEnd,
         original: suggestionData.original,
@@ -318,7 +345,7 @@ class EnhancedSuggestionState {
     }
     
     const suggestion = {
-      id: globalSuggestionId++,
+      id: action.id || `temp_${Date.now()}`, // Allow external ID or generate temporary one
       from: validation.startPos,
       to: validation.endPos,
       original: action.original,
@@ -343,10 +370,10 @@ class EnhancedSuggestionState {
   handleRemoveSuggestion(action, decorations, suggestions) {
     const targetId = action.id;
     
-    const newSuggestions = suggestions.filter(s => s.id !== targetId);
+    const newSuggestions = suggestions.filter(s => String(s.id) !== String(targetId));
     
     const toRemove = decorations.find().filter(dec => 
-      dec.type?.attrs?.['data-suggestion-id'] == targetId
+      String(dec.type?.attrs?.['data-suggestion-id']) === String(targetId)
     );
     
     const newDecorations = decorations.remove(toRemove);
@@ -361,68 +388,64 @@ class EnhancedSuggestionState {
 }
 
 /**
- * SUGGESTION PLUGIN
+ * SUGGESTION PLUGIN FACTORY
+ * Creates the plugin with an onAccept callback.
  */
-export const suggestionPlugin = new Plugin({
-  key: suggestionPluginKey,
-  
-  state: {
-    init() {
-      console.log('🎯 Working suggestion plugin initialized');
-      return new EnhancedSuggestionState();
-    },
+export function createSuggestionPlugin({ onAccept }) {
+  return new Plugin({
+    key: suggestionPluginKey,
     
-    apply(tr, state) {
-      return state.apply(tr);
-    }
-  },
-  
-  props: {
-    decorations(state) {
-      return suggestionPluginKey.getState(state).decorations;
-    },
-    
-    handleClick(view, pos, event) {
-      const state = suggestionPluginKey.getState(view.state);
-      const decorations = state.decorations.find(pos, pos);
+    state: {
+      init() {
+        console.log('🎯 Working suggestion plugin initialized');
+        return new EnhancedSuggestionState();
+      },
       
-      if (decorations.length > 0) {
-        const decoration = decorations[0];
-        
-        const suggestionId = decoration.type.attrs?.['data-suggestion-id'];
-        const original = decoration.type.attrs?.['data-original'];
-        const replacement = decoration.type.attrs?.['data-replacement'];
-        const editType = decoration.type.attrs?.['data-edit-type'];
-        
-        if (suggestionId && replacement) {
-          console.log(`🖱️ Clicked ${editType} suggestion ${suggestionId}: "${original}" → "${replacement}"`);
-          
-          const from = decoration.from;
-          const to = decoration.to;
-          
-          const tr = view.state.tr;
-          tr.replaceWith(from, to, view.state.schema.text(replacement));
-          
-          tr.setMeta(suggestionPluginKey, {
-            type: 'removeSuggestion',
-            id: parseInt(suggestionId)
-          });
-          
-          view.dispatch(tr);
-          
-          console.log(`🔄 Replacement completed`);
-          return true;
-        }
+      apply(tr, state) {
+        return state.apply(tr);
       }
+    },
+    
+    props: {
+      decorations(state) {
+        return suggestionPluginKey.getState(state).decorations;
+      },
       
-      return false;
+      handleClick(view, pos, event) {
+        const state = suggestionPluginKey.getState(view.state);
+        const decorations = state.decorations.find(pos, pos);
+        
+        if (decorations.length > 0) {
+          const decoration = decorations[0];
+          const suggestionId = decoration.type.attrs?.['data-suggestion-id'];
+          
+          if (suggestionId && onAccept) {
+            console.log(`🖱️ Clicked suggestion ${suggestionId}, passing to onAccept callback.`);
+            onAccept(suggestionId); 
+            return true; // Handled
+          }
+        }
+        
+        return false;
+      }
     }
-  }
-});
+  });
+}
 
 /**
  * HELPER FUNCTIONS
  */
+// This function is the one that should be called when accepting a suggestion
+export function acceptSuggestion(view, suggestionId) {
+  const tr = view.state.tr;
+  tr.setMeta(suggestionPluginKey, {
+    type: 'acceptSuggestion',
+    suggestionId,
+  });
+  view.dispatch(tr);
+  console.log(`✅ Accepted suggestion ${suggestionId}`);
+}
+
 export function setSuggestions(view, suggestions) {
   console.log(`📦 Setting ${suggestions.length} suggestions`);
   
@@ -434,7 +457,7 @@ export function setSuggestions(view, suggestions) {
   view.dispatch(tr);
 }
 
-export function addSuggestion(view, charStart, charEnd, original, replacement, editType = 'Line') {
+export function addSuggestion(view, charStart, charEnd, original, replacement, editType = 'Line', id = null) {
   const tr = view.state.tr;
   tr.setMeta(suggestionPluginKey, {
     type: 'addSuggestion',
@@ -442,7 +465,8 @@ export function addSuggestion(view, charStart, charEnd, original, replacement, e
     charEnd,
     original,
     replacement,
-    editType
+    editType,
+    id
   });
   view.dispatch(tr);
 }
@@ -468,4 +492,4 @@ export function getSuggestions(state) {
   return suggestionPluginKey.getState(state).suggestions;
 }
 
-export default suggestionPlugin;
+export default createSuggestionPlugin;
