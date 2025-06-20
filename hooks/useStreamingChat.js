@@ -6,11 +6,16 @@ export function useStreamingChat() {
   const [streamingMessage, setStreamingMessage] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingError, setStreamingError] = useState(null);
+  const ctrlRef = useRef(null);
 
   const lastParamsRef = useRef(null);
 
   // Cleanup logic
   const cleanup = useCallback(() => {
+    if (ctrlRef.current) {
+      ctrlRef.current.abort();
+      ctrlRef.current = null;
+    }
     setIsStreaming(false);
     setStreamingMessage('');
     setStreamingError(null);
@@ -32,6 +37,11 @@ export function useStreamingChat() {
       setIsStreaming(true);
       setStreamingMessage('');
       setStreamingError(null);
+      
+      const ctrl = new AbortController();
+      ctrlRef.current = ctrl;
+
+      let finalAccumulatedMessage = "";
 
       // Save params in case we want to retry
       lastParamsRef.current = {
@@ -46,6 +56,7 @@ export function useStreamingChat() {
 
       try {
         await fetchEventSource('/api/muse-ai-stream', {
+          signal: ctrl.signal,
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -57,10 +68,13 @@ export function useStreamingChat() {
           }),
           async onopen(response) {
             if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              const errorText = await response.text();
+              setStreamingError(`HTTP ${response.status}: ${errorText}`);
+              throw new Error(`Failed to open stream: ${response.status}`);
             }
           },
           onmessage(ev) {
+            if (ctrl.signal.aborted) return;
             try {
               const data = JSON.parse(ev.data);
               switch (data.type) {
@@ -68,6 +82,7 @@ export function useStreamingChat() {
                   // Optionally handle start signal
                   break;
                 case 'token':
+                  finalAccumulatedMessage += data.content;
                   setStreamingMessage((prev) => prev + data.content);
                   break;
                 case 'canvas_updates':
@@ -76,8 +91,7 @@ export function useStreamingChat() {
                   }
                   break;
                 case 'complete': {
-                  const finalMessage = data.fullMessage || streamingMessage;
-                  if (onComplete) onComplete(finalMessage);
+                  if (onComplete) onComplete(finalAccumulatedMessage);
                   cleanup();
                   break;
                 }
@@ -94,17 +108,22 @@ export function useStreamingChat() {
             }
           },
           onerror(err) {
-            setStreamingError(err?.message || 'Streaming error');
+            if (!ctrl.signal.aborted) {
+              setStreamingError(err?.message || 'Streaming error');
+            }
             cleanup();
+            throw err;
           },
           openWhenHidden: true,
         });
       } catch (error) {
-        setStreamingError(error?.message || 'Failed to stream response');
-        cleanup();
+         if (!ctrl.signal.aborted) {
+            setStreamingError(error?.message || 'Failed to stream response');
+            cleanup();
+        }
       }
     },
-    [cleanup, streamingMessage]
+    [cleanup]
   );
 
   // Stop streaming

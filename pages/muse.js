@@ -4,6 +4,7 @@ import PersonalityAssessment from '../components/muse/PersonalityAssessment';
 import StoryCanvas from '../components/muse/StoryCanvas';
 import ChatInterface from '../components/muse/ChatInterface';
 import { exportStoryPlan } from '../utils/export';
+import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
 
 export default function Muse() {
   // App state management
@@ -39,6 +40,8 @@ export default function Muse() {
   const [chatHistory, setChatHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pinNotification, setPinNotification] = useState(null);
+
+  const voiceRecognition = useVoiceRecognition();
 
   // Load saved data on mount
   useEffect(() => {
@@ -105,73 +108,33 @@ export default function Muse() {
   };
 
   // Handle new chat messages and canvas updates
-  const handleNewMessage = async (message) => {
-    // Add user message to chat
-    const userMessage = {
-      sender: 'user',
-      message: message,
-      timestamp: new Date().toISOString()
-    };
-    
-    const updatedHistory = [...chatHistory, userMessage];
-    setChatHistory(updatedHistory);
+  const handleNewUserMessage = async (message) => {
     setIsLoading(true);
 
-    try {
-      // Call AI API with context
-      const response = await fetch('/api/muse-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userProfile,
-          currentCanvas: canvasData,
-          chatHistory: updatedHistory,
-          newMessage: message
-        })
-      });
+    let messageToProcess = message;
+    // Heuristic: if it's a longer message with no punctuation, clean it up.
+    const needsPunctuation = !/[.!?]/.test(message) && message.split(' ').length > 8;
 
-      const result = await response.json();
-      
-      if (result.success) {
-        // Add AI response to chat
-        const aiMessage = {
-          sender: 'ai',
-          message: result.aiResponse,
-          timestamp: new Date().toISOString()
-        };
-        setChatHistory(prev => [...prev, aiMessage]);
-
-        // Update canvas with parsed content
-        if (result.canvasUpdates) {
-          setCanvasData(prev => ({
-            ...prev,
-            ...result.canvasUpdates
-          }));
-        }
-
-        // Show targeted section notification if applicable
-        if (result.targetSection) {
-          showPinNotification(`Added to ${result.targetSection}`);
-        }
-      } else {
-        console.error('AI response error:', result.error);
-        // Add error message
-        setChatHistory(prev => [...prev, {
-          sender: 'ai',
-          message: "I'm sorry, I had trouble processing that. Could you try rephrasing?",
-          timestamp: new Date().toISOString()
-        }]);
+    if (needsPunctuation) {
+      try {
+        messageToProcess = await voiceRecognition.cleanupPunctuationWithAI(message);
+      } catch (error) {
+        console.error("Failed to cleanup punctuation, sending original message.", error);
       }
-    } catch (error) {
-      console.error('Chat error:', error);
-      setChatHistory(prev => [...prev, {
-        sender: 'ai',
-        message: "Something went wrong. Let's keep going - what else would you like to explore about your story?",
-        timestamp: new Date().toISOString()
-      }]);
-    } finally {
-      setIsLoading(false);
     }
+    
+    const userMessage = {
+      sender: 'user',
+      message: messageToProcess,
+      timestamp: new Date().toISOString(),
+      id: Date.now()
+    };
+    
+    setChatHistory(prev => [...prev, userMessage]);
+  };
+
+  const handleStreamCompletion = (finalMessage) => {
+    // ... existing code ...
   };
 
   // Handle pinning AI message to canvas
@@ -362,7 +325,7 @@ export default function Muse() {
             <div className="lg:col-span-1" style={{ height: '100%' }}>
               <ChatInterface
                 chatHistory={chatHistory}
-                onNewMessage={handleNewMessage}
+                onNewMessage={handleNewUserMessage}
                 onPinToCanvas={handlePinToCanvas}
                 isLoading={isLoading}
                 userProfile={userProfile}
