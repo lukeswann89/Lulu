@@ -133,8 +133,75 @@ export default function Muse() {
     setChatHistory(prev => [...prev, userMessage]);
   };
 
-  const handleStreamCompletion = (finalMessage) => {
-    // ... existing code ...
+  // Analyze AI responses for creative intelligence
+  const analyzeForCreativeIntelligence = async (message) => {
+    try {
+      const response = await fetch('/api/creative-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          chatHistory,
+          userProfile
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        return result.insights;
+      } else {
+        console.warn('Creative analysis failed:', result.error);
+        return getDefaultCreativeInsights();
+      }
+    } catch (error) {
+      console.error('Creative analysis error:', error);
+      return getDefaultCreativeInsights();
+    }
+  };
+
+  // Default creative insights for fallback
+  const getDefaultCreativeInsights = () => {
+    return {
+      dominantPatterns: ['exploratory', 'character-driven'],
+      creativeStyle: 'character-driven',
+      cognitiveState: 'exploratory',
+      storyElements: {
+        characterFocus: 50,
+        plotDevelopment: 30,
+        themeExploration: 40,
+        worldBuilding: 20
+      },
+      canvasUpdates: {
+        character: '',
+        plot: '',
+        world: '',
+        themes: '',
+        voice: ''
+      },
+      signatureInsights: {
+        detectedPatterns: ['character-exploration'],
+        suggestedTechniques: ['free-writing', 'character-interview'],
+        creativeTriggers: ['emotional-conflict', 'character-voice']
+      }
+    };
+  };
+
+  const handleStreamCompletion = async (finalMessage) => {
+    // 1. ANALYZE the finalMessage here to extract creative insights.
+    const creativeInsights = await analyzeForCreativeIntelligence(finalMessage);
+  
+    const aiMessage = {
+      sender: 'ai',
+      message: finalMessage,
+      timestamp: new Date().toISOString(),
+      id: Date.now(),
+      // 2. STORE the insights with the message.
+      insights: creativeInsights 
+    };
+    
+    setChatHistory(prev => [...prev, aiMessage]);
+    setIsLoading(false);
   };
 
   // Handle pinning AI message to canvas
