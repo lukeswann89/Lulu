@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import PersonalityAssessment from '../components/muse/PersonalityAssessment';
 import StoryCanvas from '../components/muse/StoryCanvas';
-import ChatInterface from '../components/muse/ChatInterface';
+import TabbedInterface from '../components/muse/TabbedInterface';
 import { exportStoryPlan } from '../utils/export';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
 
@@ -40,6 +40,15 @@ export default function Muse() {
   const [chatHistory, setChatHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pinNotification, setPinNotification] = useState(null);
+  
+  // New state for tabbed interface and actions
+  const [activeTab, setActiveTab] = useState('chat');
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [hasNewInsight, setHasNewInsight] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [isAdaptiveMode, setIsAdaptiveMode] = useState(true);
+  const [creativeSignature, setCreativeSignature] = useState(null);
+  const [mobileView, setMobileView] = useState('chat'); // 'chat' or 'canvas'
 
   const voiceRecognition = useVoiceRecognition();
 
@@ -53,6 +62,12 @@ export default function Muse() {
         if (parsed.canvasData) setCanvasData(parsed.canvasData);
         if (parsed.chatHistory) setChatHistory(parsed.chatHistory);
         if (parsed.currentStep) setCurrentStep(parsed.currentStep);
+        if (typeof parsed.isAdaptiveMode === 'boolean') {
+          setIsAdaptiveMode(parsed.isAdaptiveMode);
+        }
+        if (parsed.creativeSignature) {
+          setCreativeSignature(parsed.creativeSignature);
+        }
       } catch (error) {
         console.warn('Failed to load saved Muse data:', error);
       }
@@ -67,11 +82,13 @@ export default function Muse() {
         canvasData,
         chatHistory,
         currentStep,
+        isAdaptiveMode,
+        creativeSignature,
         lastUpdated: new Date().toISOString()
       };
       localStorage.setItem('lulu_muse_project', JSON.stringify(dataToSave));
     }
-  }, [userProfile, canvasData, chatHistory, currentStep]);
+  }, [userProfile, canvasData, chatHistory, currentStep, isAdaptiveMode, creativeSignature]);
 
   // Handle assessment completion
   const handleAssessmentComplete = (profile) => {
@@ -108,103 +125,204 @@ export default function Muse() {
   };
 
   // Handle new chat messages and canvas updates
-  const handleNewUserMessage = async (message) => {
+  const handleNewUserMessage = async (message, replyToMessage) => {
     setIsLoading(true);
 
-    let messageToProcess = message;
-    // Heuristic: if it's a longer message with no punctuation, clean it up.
-    const needsPunctuation = !/[.!?]/.test(message) && message.split(' ').length > 8;
-
-    if (needsPunctuation) {
-      try {
-        messageToProcess = await voiceRecognition.cleanupPunctuationWithAI(message);
-      } catch (error) {
-        console.error("Failed to cleanup punctuation, sending original message.", error);
-      }
-    }
-    
     const userMessage = {
       sender: 'user',
-      message: messageToProcess,
+      message: message,
       timestamp: new Date().toISOString(),
-      id: Date.now()
+      id: Date.now(),
+      replyTo: replyToMessage ? { sender: replyToMessage.sender, message: replyToMessage.message } : null,
+      insights: null // Placeholder for insights
     };
+
+    const updatedChatHistory = [...chatHistory, userMessage];
+    setChatHistory(updatedChatHistory);
+
+    try {
+      // --- NEW INSIGHTS LOGIC ---
+      // Analyze the user's message in the background
+      const creativeInsights = await analyzeForCreativeIntelligence(userMessage.message, updatedChatHistory);
+      
+      // Update the message in history with its new insights
+      setChatHistory(prev => {
+          const newHistory = [...prev];
+          const messageIndex = newHistory.findIndex(m => m.id === userMessage.id);
+          if (messageIndex !== -1) {
+              newHistory[messageIndex].insights = creativeInsights.analysis;
+              // Evolve the creative signature
+              if (creativeInsights.updatedSignature) {
+                setCreativeSignature(creativeInsights.updatedSignature);
+              }
+          }
+          return newHistory;
+      });
+
+      // Notify user of new insight
+      if (activeTab !== 'insights') {
+        setHasNewInsight(true);
+      }
+
+      console.log('Insights generated for message:', userMessage.id, creativeInsights);
+    } catch (error) {
+      console.error('Failed to generate insights:', error);
+      // Set default insights if analysis fails
+      const defaultInsights = getDefaultCreativeInsights();
+      setChatHistory(prev => {
+          const newHistory = [...prev];
+          const messageIndex = newHistory.findIndex(m => m.id === userMessage.id);
+          if (messageIndex !== -1) {
+              newHistory[messageIndex].insights = defaultInsights.analysis;
+          }
+          return newHistory;
+      });
+    }
+
+    // --- AI Response Logic ---
+    // This part would now call the AI for a conversational reply
+    if (isAdaptiveMode) {
+      console.log("ADAPTIVE MODE ON: Generating response with signature:", creativeSignature);
+    } else {
+      console.log("ADAPTIVE MODE OFF: Generating standard response.");
+    }
+
+    // Simulate AI response for now
+    const aiMessage = {
+      sender: 'ai',
+      message: `This is a simulated AI reply. Adaptive Mode is ${isAdaptiveMode ? 'ON' : 'OFF'}.`,
+      timestamp: new Date().toISOString(),
+      id: Date.now() + 1, // ensure unique id
+      insights: null 
+    };
+    setChatHistory(prev => [...prev, aiMessage]);
     
-    setChatHistory(prev => [...prev, userMessage]);
+    setIsLoading(false);
   };
 
-  // Analyze AI responses for creative intelligence
-  const analyzeForCreativeIntelligence = async (message) => {
+  // Analyze USER responses for creative intelligence
+  const analyzeForCreativeIntelligence = async (message, history) => {
     try {
       const response = await fetch('/api/creative-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message,
-          chatHistory,
-          userProfile
+        body: JSON.stringify({ 
+          message, 
+          chatHistory: history, 
+          userProfile,
+          creativeSignature // Pass current signature
         })
       });
-
       const result = await response.json();
-      
-      if (result.success) {
-        return result.insights;
-      } else {
-        console.warn('Creative analysis failed:', result.error);
-        return getDefaultCreativeInsights();
-      }
+      return result.success ? result.insights : { analysis: getDefaultCreativeInsights().analysis, updatedSignature: creativeSignature };
     } catch (error) {
       console.error('Creative analysis error:', error);
-      return getDefaultCreativeInsights();
+      return { analysis: getDefaultCreativeInsights().analysis, updatedSignature: creativeSignature };
     }
   };
 
   // Default creative insights for fallback
   const getDefaultCreativeInsights = () => {
     return {
-      dominantPatterns: ['exploratory', 'character-driven'],
-      creativeStyle: 'character-driven',
-      cognitiveState: 'exploratory',
-      storyElements: {
-        characterFocus: 50,
-        plotDevelopment: 30,
-        themeExploration: 40,
-        worldBuilding: 20
+      analysis: {
+        dominantPatterns: ['exploratory', 'character-driven'],
+        creativeStyle: 'character-driven',
+        cognitiveState: 'exploratory',
+        storyElements: {
+          characterFocus: 50,
+          plotDevelopment: 30,
+          themeExploration: 40,
+          worldBuilding: 20
+        },
+        canvasUpdates: {
+          character: 'A default suggestion for a character.',
+          plot: '',
+          world: '',
+          themes: '',
+          voice: ''
+        },
+        signatureInsights: {
+          detectedPatterns: ['character-exploration'],
+          suggestedTechniques: ['free-writing', 'character-interview'],
+          creativeTriggers: ['emotional-conflict', 'character-voice']
+        }
       },
-      canvasUpdates: {
-        character: '',
-        plot: '',
-        world: '',
-        themes: '',
-        voice: ''
-      },
-      signatureInsights: {
-        detectedPatterns: ['character-exploration'],
-        suggestedTechniques: ['free-writing', 'character-interview'],
-        creativeTriggers: ['emotional-conflict', 'character-voice']
+      updatedSignature: creativeSignature // Return the existing signature on fallback
+    };
+  };
+
+  // Handle selecting a USER message to analyze its insights
+  const handleSelectMessage = async (message) => {
+      console.log('handleSelectMessage called with:', message);
+      if (message.sender === 'user') {
+        console.log('Message has insights:', message.insights);
+        
+        // If the message doesn't have insights, generate them on-demand
+        if (!message.insights) {
+          console.log('Generating insights for existing message...');
+          setIsLoading(true);
+          
+          try {
+            const creativeInsights = await analyzeForCreativeIntelligence(message.message, chatHistory);
+            
+            // Update the message in history with the new insights
+            setChatHistory(prev => {
+                const newHistory = [...prev];
+                const messageIndex = newHistory.findIndex(m => m.id === message.id);
+                if (messageIndex !== -1) {
+                    newHistory[messageIndex].insights = creativeInsights.analysis;
+                    // Evolve the creative signature
+                    if (creativeInsights.updatedSignature) {
+                      setCreativeSignature(creativeInsights.updatedSignature);
+                    }
+                }
+                return newHistory;
+            });
+            
+            // Update the selected message with insights
+            setSelectedMessage({
+                ...message,
+                insights: creativeInsights.analysis
+            });
+            
+            console.log('Insights generated for existing message:', creativeInsights);
+          } catch (error) {
+            console.error('Failed to generate insights for existing message:', error);
+            // Set default insights if analysis fails
+            const defaultInsights = getDefaultCreativeInsights();
+            setSelectedMessage({
+                ...message,
+                insights: defaultInsights.analysis
+            });
+            
+            // Also update the message in history
+            setChatHistory(prev => {
+                const newHistory = [...prev];
+                const messageIndex = newHistory.findIndex(m => m.id === message.id);
+                if (messageIndex !== -1) {
+                    newHistory[messageIndex].insights = defaultInsights.analysis;
+                }
+                return newHistory;
+            });
+          } finally {
+            // No longer setting isLoading here, it's handled in the user message handler
+          }
+        } else {
+          // Message already has insights, just select it
+          setSelectedMessage(message);
+        }
+        
+        setActiveTab('insights');
+        setHasNewInsight(false);
       }
-    };
   };
-
-  const handleStreamCompletion = async (finalMessage) => {
-    // 1. ANALYZE the finalMessage here to extract creative insights.
-    const creativeInsights = await analyzeForCreativeIntelligence(finalMessage);
   
-    const aiMessage = {
-      sender: 'ai',
-      message: finalMessage,
-      timestamp: new Date().toISOString(),
-      id: Date.now(),
-      // 2. STORE the insights with the message.
-      insights: creativeInsights 
-    };
-    
-    setChatHistory(prev => [...prev, aiMessage]);
-    setIsLoading(false);
+  // Handle setting a message to reply to
+  const handleSetReplyingTo = (message) => {
+      setReplyingTo(message);
   };
-
-  // Handle pinning AI message to canvas
+  
+  // Handle pinning a message to the canvas
   const handlePinToCanvas = async (message) => {
     setIsLoading(true);
     
@@ -306,6 +424,47 @@ export default function Muse() {
     }
   };
 
+  const handleToggleAdaptiveMode = () => {
+    setIsAdaptiveMode(prev => !prev);
+  };
+
+  const handleApplyInsightsToCanvas = (insights) => {
+    if (!insights || !insights.canvasUpdates) {
+      showPinNotification('No suggestions to apply.', 'error');
+      return;
+    }
+    
+    const updates = insights.canvasUpdates;
+    let updatesApplied = 0;
+
+    setCanvasData(prev => {
+      const updated = { ...prev };
+      
+      Object.keys(updates).forEach(category => {
+        if (updates[category] && updated[category]) {
+          Object.keys(updates[category]).forEach(section => {
+            const newContent = updates[category][section];
+            if (newContent && typeof updated[category][section] !== 'undefined') {
+              const existingContent = updated[category][section];
+              updated[category][section] = existingContent 
+                ? `${existingContent}\n\n---\nSuggested by Lulu:\n${newContent}`
+                : newContent;
+              updatesApplied++;
+            }
+          });
+        }
+      });
+      
+      return updated;
+    });
+
+    if (updatesApplied > 0) {
+      showPinNotification(`${updatesApplied} suggestion(s) applied to canvas!`);
+    } else {
+      showPinNotification('No new suggestions were found to apply.', 'error');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
       <Head>
@@ -313,32 +472,31 @@ export default function Muse() {
         <meta name="description" content="AI-powered story planning tool that adapts to your creative style" />
       </Head>
 
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
               <h1 className="text-2xl font-bold text-purple-600">Lulu Muse</h1>
               {userProfile && (
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-gray-600 hidden sm:inline">
                   Welcome back, {userProfile.name}!
                 </span>
               )}
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {currentStep === 'planning' && (
                 <>
                   <button
                     onClick={handleExport}
-                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                    className="bg-purple-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
                   >
-                    Export Story Plan
+                    Export
                   </button>
                   <button
                     onClick={handleReset}
-                    className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+                    className="bg-gray-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors text-sm"
                   >
-                    Start Over
+                    Reset
                   </button>
                 </>
               )}
@@ -346,14 +504,14 @@ export default function Muse() {
                 href="/"
                 className="text-purple-600 hover:text-purple-700 font-medium"
               >
-                ← Back to Lulu Editor
+                <span className="hidden sm:inline">← Back to Editor</span>
+                <span className="sm:hidden">← Back</span>
               </a>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Pin Notification */}
       {pinNotification && (
         <div className={`fixed top-20 right-4 px-4 py-2 rounded-lg shadow-lg transition-all transform ${
           pinNotification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
@@ -371,52 +529,104 @@ export default function Muse() {
         </div>
       )}
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentStep === 'assessment' && (
           <PersonalityAssessment onComplete={handleAssessmentComplete} />
         )}
 
         {currentStep === 'planning' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8" style={{ height: 'calc(100vh-200px)' }}>
-            {/* Story Canvas - 2/3 width */}
-            <div className="lg:col-span-2" style={{ height: '100%' }}>
-              <StoryCanvas 
-                canvasData={canvasData}
-                userProfile={userProfile}
-                onCanvasEdit={handleCanvasEdit}
-              />
+          <>
+            {/* Desktop Layout: Side-by-side grid */}
+            <div className="hidden lg:grid grid-cols-1 lg:grid-cols-3 gap-8" style={{ height: 'calc(100vh - 180px)' }}>
+              <div className="lg:col-span-2 h-full">
+                <StoryCanvas 
+                  canvasData={canvasData}
+                  userProfile={userProfile}
+                  onCanvasEdit={handleCanvasEdit}
+                />
+              </div>
+              <div className="lg:col-span-1 h-full">
+                <TabbedInterface
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  chatHistory={chatHistory}
+                  onNewMessage={handleNewUserMessage}
+                  onPinToCanvas={handlePinToCanvas}
+                  isLoading={isLoading}
+                  userProfile={userProfile}
+                  selectedMessage={selectedMessage}
+                  onSelectMessage={handleSelectMessage}
+                  hasNewInsight={hasNewInsight}
+                  setHasNewInsight={setHasNewInsight}
+                  replyingTo={replyingTo}
+                  onSetReplyingTo={handleSetReplyingTo}
+                  onCancelReply={() => setReplyingTo(null)}
+                  isAdaptiveMode={isAdaptiveMode}
+                  onToggleAdaptiveMode={handleToggleAdaptiveMode}
+                  onApplyInsights={handleApplyInsightsToCanvas}
+                  creativeSignature={creativeSignature}
+                />
+              </div>
             </div>
-            
-            {/* Chat Interface - 1/3 width */}
-            <div className="lg:col-span-1" style={{ height: '100%' }}>
-              <ChatInterface
-                chatHistory={chatHistory}
-                onNewMessage={handleNewUserMessage}
-                onPinToCanvas={handlePinToCanvas}
-                isLoading={isLoading}
-                userProfile={userProfile}
-              />
+
+            {/* Mobile Layout: Toggle between views */}
+            <div className="lg:hidden">
+              <div className="pb-16">
+                {mobileView === 'canvas' ? (
+                  <StoryCanvas 
+                    canvasData={canvasData}
+                    userProfile={userProfile}
+                    onCanvasEdit={handleCanvasEdit}
+                  />
+                ) : (
+                  <div style={{ height: 'calc(100vh - 180px)' }}>
+                    <TabbedInterface
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      chatHistory={chatHistory}
+                      onNewMessage={handleNewUserMessage}
+                      onPinToCanvas={handlePinToCanvas}
+                      isLoading={isLoading}
+                      userProfile={userProfile}
+                      selectedMessage={selectedMessage}
+                      onSelectMessage={handleSelectMessage}
+                      hasNewInsight={hasNewInsight}
+                      setHasNewInsight={setHasNewInsight}
+                      replyingTo={replyingTo}
+                      onSetReplyingTo={handleSetReplyingTo}
+                      onCancelReply={() => setReplyingTo(null)}
+                      isAdaptiveMode={isAdaptiveMode}
+                      onToggleAdaptiveMode={handleToggleAdaptiveMode}
+                      onApplyInsights={handleApplyInsightsToCanvas}
+                      creativeSignature={creativeSignature}
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-t-lg z-20">
+                <div className="flex justify-around items-center h-16">
+                  <button onClick={() => setMobileView('canvas')} className={`flex flex-col items-center justify-center w-full h-full text-sm font-medium transition-colors ${mobileView === 'canvas' ? 'text-purple-600' : 'text-gray-500 hover:text-purple-500'}`}>
+                    <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                    <span>Canvas</span>
+                  </button>
+                  <button onClick={() => setMobileView('chat')} className={`flex flex-col items-center justify-center w-full h-full text-sm font-medium transition-colors ${mobileView === 'chat' ? 'text-purple-600' : 'text-gray-500 hover:text-purple-500'}`}>
+                    <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2V7a2 2 0 012-2h2m6 0a2 2 0 00-2-2H9a2 2 0 00-2 2v10a2 2 0 002 2h1v4l4-4h2a2 2 0 002-2V8z" /></svg>
+                    <span>Muse</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
       <style jsx>{`
         @keyframes slide-in {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
-        
-        .animate-slide-in {
-          animation: slide-in 0.3s ease-out;
-        }
+        .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
     </div>
   );
