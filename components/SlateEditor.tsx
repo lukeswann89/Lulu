@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback, useState } from 'react';
 import { createEditor, Descendant, Range, Editor, Transforms, Text, Node, BaseEditor } from 'slate';
-import { Slate, Editable, withReact, ReactEditor } from 'slate-react';
+import { Slate, Editable, withReact, ReactEditor, RenderLeafProps } from 'slate-react';
 import { withHistory } from 'slate-history';
 import { Box, Stack, Button, Text as ChakraText, Badge } from '@chakra-ui/react';
 import type { StackProps } from '@chakra-ui/react';
@@ -107,11 +107,14 @@ const SlateEditor: React.FC<SlateEditorProps> = ({
   }, [suggestions, onSuggestionChange]);
 
   // Render each leaf (text node) with potential highlighting
-  const renderLeaf = useCallback(props => {
+  const renderLeaf = useCallback((props: RenderLeafProps) => {
+    // The `props.leaf` is the text node. We cast to any to check for custom properties.
+    const leaf = props.leaf as any;
+
+    // A simplified check: does this leaf's text contain a pending suggestion?
+    // Note: This is not a perfect implementation for overlapping or repeated suggestions.
     const suggestion = suggestions.find(
-      s =>
-        s.state === 'pending' &&
-        props.leaf.text.slice(props.leaf.offset, props.leaf.offset + s.original.length) === s.original
+      s => s.state === 'pending' && leaf.text.includes(s.original)
     );
 
     if (suggestion) {
@@ -128,9 +131,6 @@ const SlateEditor: React.FC<SlateEditorProps> = ({
           onMouseLeave={() => setActiveHighlight(null)}
         >
           {props.children}
-          <sup style={{ fontSize: '0.85em', color: '#a16207' }}>
-            {suggestions.findIndex(s => s.id === suggestion.id) + 1}
-          </sup>
         </span>
       );
     }
