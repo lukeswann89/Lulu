@@ -1,14 +1,11 @@
 // /plugins/suggestionPlugin.js
-// WORKING VERSION: All-in-one with built-in position mapping and conflict resolution
+// FIXED VERSION: Proper separation of text replacement and state management
 
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 
 // Plugin key for suggestion state
 export const suggestionPluginKey = new PluginKey('suggestions');
-
-// Keep track of suggestions by their original ID from the backend
-// let globalSuggestionId = 1; // No longer needed for this logic
 
 /**
  * BUILT-IN POSITION MAPPER
@@ -203,18 +200,20 @@ class EnhancedSuggestionState {
           break;
           
         case 'acceptSuggestion': {
+          // ✅ FIXED: Only manage state, don't do text replacement here
           const { suggestionId } = action;
-          const suggestion = this.suggestions.find(s => s.id === suggestionId);
-          if (!suggestion) return this;
-
-          // Apply the replacement
-          const { from, to, replacement } = suggestion;
-          tr.replaceWith(from, to, tr.doc.type.schema.text(replacement));
-
+          
           // Remove the accepted suggestion's decoration
-          const decorationToRemove = this.decorations.find(from, to, spec => spec['data-suggestion-id'] === suggestionId);
-          if (decorationToRemove.length) {
-            decorations = this.decorations.remove(decorationToRemove);
+          const suggestionToRemove = this.suggestions.find(s => s.id === suggestionId);
+          if (suggestionToRemove) {
+            const decorationToRemove = this.decorations.find(
+              suggestionToRemove.from, 
+              suggestionToRemove.to, 
+              spec => spec['data-suggestion-id'] === suggestionId
+            );
+            if (decorationToRemove.length) {
+              decorations = this.decorations.remove(decorationToRemove);
+            }
           }
           
           // Filter out the accepted suggestion from state
@@ -222,6 +221,7 @@ class EnhancedSuggestionState {
 
           // Map remaining decorations
           decorations = decorations.map(tr.mapping, tr.doc);
+          console.log(`✅ Plugin: Removed suggestion ${suggestionId} from state`);
           break;
         }
 
@@ -242,7 +242,6 @@ class EnhancedSuggestionState {
         case 'clearAll':
           decorations = DecorationSet.empty;
           suggestions = [];
-          // globalSuggestionId = 1;
           console.log('🧹 Cleared all suggestions');
           break;
       }
@@ -256,9 +255,6 @@ class EnhancedSuggestionState {
 
   handleSetSuggestions(action, doc) {
     console.log('🎯 Processing suggestions with built-in position mapping...');
-    
-    // Reset state
-    // globalSuggestionId = 1;
     
     // Step 1: Map character positions to ProseMirror positions
     console.log('📍 Mapping character positions to ProseMirror positions');
@@ -433,24 +429,74 @@ export function createSuggestionPlugin({ onAccept }) {
 }
 
 /**
- * HELPER FUNCTIONS
+ * HELPER FUNCTIONS - FIXED
  */
-// This function is the one that should be called when accepting a suggestion
+// ✅ FIXED: Proper text replacement then state cleanup
 export function acceptSuggestion(view, suggestionId) {
+  // Get the suggestion before we remove it from state
+  const suggestionPlugin = view.state.plugins.find(p => 
+    p.key && (p.key.key === 'suggestions' || String(p.key) === 'suggestions$')
+  );
+  
+  if (!suggestionPlugin) {
+    console.error('❌ Suggestion plugin not found');
+    return;
+  }
+
+  const currentState = suggestionPlugin.getState(view.state);
+  const suggestion = currentState.suggestions.find(s => s.id === suggestionId);
+  
+  if (!suggestion) {
+    console.warn('⚠️ Suggestion not found:', suggestionId);
+    return;
+  }
+
+  console.log(`🔧 Accepting suggestion ${suggestionId}: "${suggestion.original}" → "${suggestion.replacement}"`);
+
+  // ✅ FIXED: Do both operations in a single transaction
   const tr = view.state.tr;
-  tr.setMeta(suggestionPluginKey, {
+  
+  // 1. Text replacement
+  tr.replaceWith(suggestion.from, suggestion.to, 
+    view.state.schema.text(suggestion.replacement));
+  
+  // 2. Remove from plugin state in same transaction
+  tr.setMeta(suggestionPlugin.key, {
     type: 'acceptSuggestion',
-    suggestionId,
+    suggestionId
   });
+  
+  // Dispatch both changes at once
   view.dispatch(tr);
-  console.log(`✅ Accepted suggestion ${suggestionId}`);
+  
+  console.log(`✅ Completed suggestion ${suggestionId} (text + state removal)`);
+
+  // 2. THEN: Remove from plugin state in a separate transaction
+  setTimeout(() => {
+    const removeTr = view.state.tr;
+    removeTr.setMeta(suggestionPlugin.key, {
+      type: 'acceptSuggestion',
+      suggestionId
+    });
+    view.dispatch(removeTr);
+    console.log(`✅ Removed ${suggestionId} from plugin state`);
+  }, 10); // Small delay to ensure text replacement is processed first
 }
 
 export function setSuggestions(view, suggestions) {
   console.log(`📦 Setting ${suggestions.length} suggestions`);
   
+  const suggestionPlugin = view.state.plugins.find(p => 
+    p.key && (p.key.key === 'suggestions' || String(p.key) === 'suggestions$')
+  );
+  
+  if (!suggestionPlugin) {
+    console.error('❌ Suggestion plugin not found');
+    return;
+  }
+  
   const tr = view.state.tr;
-  tr.setMeta(suggestionPluginKey, {
+  tr.setMeta(suggestionPlugin.key, {
     type: 'setSuggestions',
     suggestions
   });
@@ -458,8 +504,17 @@ export function setSuggestions(view, suggestions) {
 }
 
 export function addSuggestion(view, charStart, charEnd, original, replacement, editType = 'Line', id = null) {
+  const suggestionPlugin = view.state.plugins.find(p => 
+    p.key && (p.key.key === 'suggestions' || String(p.key) === 'suggestions$')
+  );
+  
+  if (!suggestionPlugin) {
+    console.error('❌ Suggestion plugin not found');
+    return;
+  }
+
   const tr = view.state.tr;
-  tr.setMeta(suggestionPluginKey, {
+  tr.setMeta(suggestionPlugin.key, {
     type: 'addSuggestion',
     charStart,
     charEnd,
@@ -472,8 +527,17 @@ export function addSuggestion(view, charStart, charEnd, original, replacement, e
 }
 
 export function removeSuggestion(view, id) {
+  const suggestionPlugin = view.state.plugins.find(p => 
+    p.key && (p.key.key === 'suggestions' || String(p.key) === 'suggestions$')
+  );
+  
+  if (!suggestionPlugin) {
+    console.error('❌ Suggestion plugin not found');
+    return;
+  }
+
   const tr = view.state.tr;
-  tr.setMeta(suggestionPluginKey, {
+  tr.setMeta(suggestionPlugin.key, {
     type: 'removeSuggestion',
     id
   });
@@ -481,15 +545,33 @@ export function removeSuggestion(view, id) {
 }
 
 export function clearAllSuggestions(view) {
+  const suggestionPlugin = view.state.plugins.find(p => 
+    p.key && (p.key.key === 'suggestions' || String(p.key) === 'suggestions$')
+  );
+  
+  if (!suggestionPlugin) {
+    console.error('❌ Suggestion plugin not found');
+    return;
+  }
+
   const tr = view.state.tr;
-  tr.setMeta(suggestionPluginKey, {
+  tr.setMeta(suggestionPlugin.key, {
     type: 'clearAll'
   });
   view.dispatch(tr);
 }
 
 export function getSuggestions(state) {
-  return suggestionPluginKey.getState(state).suggestions;
+  const suggestionPlugin = state.plugins.find(p => 
+    p.key && (p.key.key === 'suggestions' || String(p.key) === 'suggestions$')
+  );
+  
+  if (!suggestionPlugin) {
+    console.error('❌ Suggestion plugin not found');
+    return [];
+  }
+
+  return suggestionPlugin.getState(state).suggestions;
 }
 
 export default createSuggestionPlugin;

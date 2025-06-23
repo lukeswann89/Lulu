@@ -282,51 +282,53 @@ export default function Home() {
 
   // 🚀 FIXED: Accept/Reject/Revise Functions with PROPER ref debugging
   function acceptSpecific(id) {
-    console.log(`🎯 Accept Specific - ID: ${id}`);
-    
-    // 🔍 DEBUG: Let's see what the ref actually contains
-    console.log('🔍 Debug proseMirrorRef:', proseMirrorRef.current);
-    if (proseMirrorRef.current) {
-      console.log('🔍 Available properties:', Object.keys(proseMirrorRef.current));
-    }
-    
-    // ✅ FIXED: Try multiple possible ref structures
+  console.log(`🎯 Accept Specific - ID: ${id}`);
+  
+  try {
+    // ✅ IMPROVED: Better ref access and error handling
     let view = null;
-    if (proseMirrorRef.current?.editor) {
-      view = proseMirrorRef.current.editor;
-      console.log('✅ Found editor via proseMirrorRef.current.editor');
-    } else if (proseMirrorRef.current?.view) {
+    if (proseMirrorRef.current?.view) {
       view = proseMirrorRef.current.view;
       console.log('✅ Found editor via proseMirrorRef.current.view');
+    } else if (proseMirrorRef.current?.editor) {
+      view = proseMirrorRef.current.editor;
+      console.log('✅ Found editor via proseMirrorRef.current.editor');
     } else if (window.luluProseMirror?.view) {
       view = window.luluProseMirror.view;
       console.log('✅ Found editor via window.luluProseMirror.view');
     }
     
-    if (view) {
-      try {
-        // ✅ FIXED: Use imported function with correct view
-        acceptSuggestion(view, id);
-        
-        // Update the state of the suggestion in the side panel
-        setSpecificEdits(edits =>
-          edits.map(edit =>
-            edit.id === id ? { ...edit, state: 'accepted' } : edit
-          )
-        );
-        logAction('SpecificEdit', { id, newState: 'accepted' });
-        console.log(`✅ Successfully accepted suggestion ${id}`);
-      } catch (error) {
-        console.error(`❌ Error accepting suggestion ${id}:`, error);
-      }
-    } else {
+    if (!view) {
       console.error("❌ ProseMirror editor not available to accept suggestion.");
       console.error("❌ Available refs:", {
         proseMirrorRefCurrent: proseMirrorRef.current,
         globalDebug: window.luluProseMirror
       });
+      return;
     }
+
+    // ✅ SIMPLIFIED: Let the plugin handle everything
+    // The corrected acceptSuggestion function will:
+    // 1. Do the text replacement
+    // 2. Remove from plugin state
+    // 3. Update the UI automatically
+    
+    // Since we're calling this from the UI callback, 
+    // the ProseMirrorEditor component already handles the acceptSuggestion call
+    // We just need to update our local state
+    setSpecificEdits(edits =>
+      edits.map(edit =>
+        edit.id === id ? { ...edit, state: 'accepted' } : edit
+      )
+    );
+    
+    logAction('SpecificEdit', { id, newState: 'accepted' });
+    console.log(`✅ Successfully updated UI state for suggestion ${id}`);
+    
+  } catch (error) {
+    console.error(`❌ Error in acceptSpecific for ${id}:`, error);
   }
+}
   
   function rejectSpecific(id) {
     console.log(`🎯 Reject Specific - ID: ${id}`);
