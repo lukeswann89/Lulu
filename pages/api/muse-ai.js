@@ -274,20 +274,25 @@ function detectTargeting(message) {
 }
 
 function buildSystemPrompt(userProfile) {
-  const { name, bigFive, writerType, processStyle, storyDrive, insights } = userProfile;
+  // Handle missing or incomplete userProfile
+  if (!userProfile) {
+    return `You are Lulu, an AI writing muse helping a writer develop their story. Be encouraging, supportive, and ask follow-up questions that help develop their ideas. Keep responses conversational and natural.`;
+  }
+
+  const { name = 'Writer', bigFive, writerType, processStyle, storyDrive, insights = {} } = userProfile;
   
   let personality = `You are Lulu, an AI writing muse helping ${name} develop their story. `;
   
-  // Adapt personality based on user profile
-  if (insights.conversationStyle === 'energetic') {
+  // Adapt personality based on user profile (with safe property access)
+  if (insights && insights.conversationStyle === 'energetic') {
     personality += `Be enthusiastic, encouraging, and excited about their ideas. Use exclamation points and positive language. `;
   } else {
     personality += `Be thoughtful, reflective, and gently encouraging. Ask deeper questions and give them space to think. `;
   }
   
-  if (insights.primaryMode === 'explorer') {
+  if (insights && insights.primaryMode === 'explorer') {
     personality += `${name} loves to discover their story organically. Encourage wild ideas, unexpected connections, and creative exploration. Don't push for too much structure at once. `;
-  } else if (insights.primaryMode === 'architect') {
+  } else if (insights && insights.primaryMode === 'architect') {
     personality += `${name} likes systematic planning. Help them build their story methodically, ask clarifying questions, and suggest logical next steps. `;
   }
   

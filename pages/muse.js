@@ -159,6 +159,12 @@ export default function Muse() {
           return newHistory;
       });
 
+      // Apply canvas updates from creative analysis if any
+      if (creativeInsights.analysis && creativeInsights.analysis.canvasUpdates) {
+        // Use the sophisticated canvas update function
+        handleApplyInsightsToCanvas(creativeInsights.analysis);
+      }
+
       // Notify user of new insight
       if (activeTab !== 'insights') {
         setHasNewInsight(true);
@@ -187,15 +193,78 @@ export default function Muse() {
       console.log("ADAPTIVE MODE OFF: Generating standard response.");
     }
 
-    // Simulate AI response for now
-    const aiMessage = {
-      sender: 'ai',
-      message: `This is a simulated AI reply. Adaptive Mode is ${isAdaptiveMode ? 'ON' : 'OFF'}.`,
-      timestamp: new Date().toISOString(),
-      id: Date.now() + 1, // ensure unique id
-      insights: null 
-    };
-    setChatHistory(prev => [...prev, aiMessage]);
+    try {
+      // Call the AI for a conversational response
+      const response = await fetch('/api/muse-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userProfile,
+          currentCanvas: canvasData,
+          chatHistory: updatedChatHistory,
+          newMessage: message,
+          isPinRequest: false
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Create AI message
+        const aiMessage = {
+          sender: 'ai',
+          message: result.aiResponse,
+          timestamp: new Date().toISOString(),
+          id: Date.now() + 1, // ensure unique id
+          insights: null 
+        };
+        setChatHistory(prev => [...prev, aiMessage]);
+
+        // Apply canvas updates if any
+        if (result.canvasUpdates && Object.keys(result.canvasUpdates).length > 0) {
+          setCanvasData(prev => {
+            const updated = { ...prev };
+            
+            Object.keys(result.canvasUpdates).forEach(category => {
+              Object.keys(result.canvasUpdates[category]).forEach(section => {
+                const newContent = result.canvasUpdates[category][section];
+                const existingContent = updated[category][section];
+                
+                // Append new content if there's existing content
+                if (existingContent && existingContent.trim()) {
+                  updated[category][section] = `${existingContent}\n\n${newContent}`;
+                } else {
+                  updated[category][section] = newContent;
+                }
+              });
+            });
+            
+            return updated;
+          });
+        }
+      } else {
+        // Fallback if AI call fails
+        const aiMessage = {
+          sender: 'ai',
+          message: "I'm having trouble processing that right now. Could you try rephrasing?",
+          timestamp: new Date().toISOString(),
+          id: Date.now() + 1,
+          insights: null 
+        };
+        setChatHistory(prev => [...prev, aiMessage]);
+      }
+    } catch (error) {
+      console.error('AI response error:', error);
+      // Fallback if AI call fails
+      const aiMessage = {
+        sender: 'ai',
+        message: "I'm having trouble processing that right now. Could you try rephrasing?",
+        timestamp: new Date().toISOString(),
+        id: Date.now() + 1,
+        insights: null 
+      };
+      setChatHistory(prev => [...prev, aiMessage]);
+    }
     
     setIsLoading(false);
   };

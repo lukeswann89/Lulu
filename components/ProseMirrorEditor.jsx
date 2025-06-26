@@ -12,6 +12,7 @@ import { luluSchema } from "../schemas/luluSchema";
 import { createSuggestionPlugin, setSuggestions, acceptSuggestion as pmAcceptSuggestion } from "../plugins/suggestionPlugin";
 import { createDocFromText, docToText } from "../utils/prosemirrorHelpers";
 import { SuggestionManager } from "../utils/suggestionManager";
+import { Plugin } from "prosemirror-state";
 
 const ProseMirrorIntegration = forwardRef(({
   value = "",
@@ -95,7 +96,8 @@ const ProseMirrorIntegration = forwardRef(({
       const state = EditorState.create({
         doc,
         plugins: [
-          createSuggestionPlugin({ onAccept: handleAccept }) // Use the factory
+          createSuggestionPlugin({ onAccept: handleAccept }), // Use the factory
+          acceptCleanup
         ]
       });
 
@@ -293,4 +295,34 @@ function getColorForEditType(editType) {
 // Export with dynamic loading to match your existing pattern
 export default dynamic(() => Promise.resolve(ProseMirrorIntegration), {
   ssr: false
+});
+
+function dump() {
+  const v = window.luluProseMirror?.view;
+  const s = v?.state;
+  const plugin = v?.state.plugins.find(p => p.key.key === 'suggestions');
+  const { suggestions, decorations } = plugin.getState(s);
+  console.group('Current suggestions');
+  suggestions.forEach(o => {
+    console.log(o.id, o.from, o.to, s.doc.textBetween(o.from, o.to));
+  });
+  console.groupEnd();
+  console.log('Decoration count', decorations.find().length);
+}
+
+export const acceptCleanup = new Plugin({
+  appendTransaction(_, oldState, newState) {
+    const id = newState.tr.getMeta('acceptedId');
+    if (!id) return;
+    const sugState = suggestionPluginKey.getState(newState);
+    const decos = sugState.decorations.find()
+      .filter(d => d.type.attrs['data-suggestion-id'] === id);
+    if (decos.length) {
+      const newDecoSet = sugState.decorations.remove(decos);
+      return newState.tr.setMeta(suggestionPluginKey, {
+        type:'replaceDecorations', // custom
+        decorations: newDecoSet
+      });
+    }
+  }
 });

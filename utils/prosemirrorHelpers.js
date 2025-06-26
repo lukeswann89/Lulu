@@ -116,18 +116,22 @@ export function processSuggestionsForDoc(suggestions, doc) {
   }))
 }
 
-// Find text position in document (alternative to position mapper)
+// Case-insensitive search helper
 export function findTextInDoc(doc, searchText, startPos = 0) {
-  const docText = doc.textContent
-  const index = docText.indexOf(searchText, startPos)
-  
-  if (index === -1) return null
-  
+  if (!searchText) return null;
+
+  const haystack = doc.textContent.toLowerCase();
+  const needle = searchText.toLowerCase();
+
+  const index = haystack.indexOf(needle, startPos);
+
+  if (index === -1) return null;
+
   return {
-    from: index + 1, // ProseMirror positions are 1-based
-    to: index + 1 + searchText.length,
-    text: searchText
-  }
+    from: index,            // 0-based character offsets for PositionMapper
+    to: index + needle.length,
+    text: doc.textContent.slice(index, index + needle.length)
+  };
 }
 
 // Get text content between positions

@@ -1,9 +1,8 @@
-import { Configuration, OpenAIApi } from "openai";
+import OpenAI from 'openai';
 
-const configuration = new Configuration({
+const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -11,6 +10,11 @@ export default async function handler(req, res) {
     }
 
     const { message, chatHistory, userProfile, creativeSignature } = req.body;
+
+    // Validate required fields
+    if (!message) {
+        return res.status(400).json({ error: 'Message is required' });
+    }
 
     const analysisPrompt = `ANALYZE THIS CREATIVE EXCHANGE FOR A USER'S CREATIVE SIGNATURE:
 
@@ -59,19 +63,62 @@ RETURN ONLY A JSON OBJECT with this exact structure, with no extra commentary:
 }`;
 
     try {
-        const response = await openai.createCompletion({
-            model: "text-davinci-003",
-            prompt: analysisPrompt,
+        console.log('Making OpenAI API call...');
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are a creative writing analysis assistant. Always respond with valid JSON only."
+                },
+                {
+                    role: "user",
+                    content: analysisPrompt
+                }
+            ],
             max_tokens: 800,
             temperature: 0.3,
-            n: 1,
         });
 
-        const insights = JSON.parse(response.data.choices[0].text.trim());
+        console.log('OpenAI response received:', response.choices[0].message.content);
+        
+        const responseText = response.choices[0].message.content.trim();
+        if (!responseText) {
+            throw new Error('Empty response from OpenAI');
+        }
+
+        const insights = JSON.parse(responseText);
+        console.log('Parsed insights successfully');
         res.status(200).json({ success: true, insights });
 
     } catch (error) {
-        console.error('OpenAI API error:', error.response ? error.response.data : error.message);
-        res.status(500).json({ success: false, error: 'Failed to get creative analysis.' });
+        console.error('Creative analysis error:', error);
+        
+        // Check if it's a JSON parsing error
+        if (error instanceof SyntaxError) {
+            console.error('JSON parsing failed. Response was:', error.message);
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Failed to parse OpenAI response as JSON',
+                details: error.message 
+            });
+        }
+        
+        // Check if it's an OpenAI API error
+        if (error.response) {
+            console.error('OpenAI API error:', error.response.data);
+            return res.status(500).json({ 
+                success: false, 
+                error: 'OpenAI API error',
+                details: error.response.data 
+            });
+        }
+        
+        // Generic error
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to get creative analysis',
+            details: error.message 
+        });
     }
 } 

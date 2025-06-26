@@ -18,22 +18,34 @@ export class SuggestionManager {
   // Add suggestions for specific text
   addTextSuggestions(searchText, replacementText, suggestionType = 'suggestion') {
     const doc = this.view.state.doc;
-    const positions = findTextInDoc(doc, searchText);
-    
+
+    // Collect *all* occurrences, not just the first one
+    const positions = [];
+    let cursor = 0;
+    while (true) {
+      const match = findTextInDoc(doc, searchText, cursor);
+      if (!match) break;
+      positions.push(match);
+      // Move cursor forward to avoid infinite loop (allow overlapping by +1?)
+      cursor = match.to - 1; // continue search after current match
+    }
+
     if (positions.length === 0) {
       console.log(`⚠️ No occurrences found for: "${searchText}"`);
       return [];
     }
 
     // Add suggestions for each occurrence
-    positions.forEach(pos => {
+    positions.forEach((pos) => {
+      const uniqueId = `temp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
       addSuggestion(
         this.view,
-        pos.from,
+        pos.from, // 0-based char indices
         pos.to,
         searchText,
         replacementText,
-        suggestionType
+        suggestionType,
+        uniqueId
       );
     });
 
