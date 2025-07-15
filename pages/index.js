@@ -155,28 +155,53 @@ export default function Home() {
     };
   }, []); // Only run once
 
-  // ✅ LOAD SUGGESTIONS DIRECTLY VIA SUGGESTIONMANAGER (same as test page approach)
-  useEffect(() => {
-    if (!managerRef.current || !viewRef.current || !proseMirrorInitialised) return;
+ // ✅ FINAL, WORKING VERSION - NO INFINITE LOOP
+useEffect(() => {
+  if (!managerRef.current || !viewRef.current || !proseMirrorInitialised) return;
 
-    // Clear existing suggestions
+  // We only want to run the expensive suggestion-finding logic when the API
+  // first delivers its suggestions. We can tell this is the case because the
+  // suggestions will have a 'pending' state.
+  const isFreshFromApi = specificEdits.some(s => s.state === 'pending');
+
+  if (mode === "Specific Edits" && isFreshFromApi && showHighlights) {
+    console.log("🚀 Detected fresh API suggestions. Running synchronization...");
+    
+    // Clear any old highlights to start fresh
     clearAllSuggestions(viewRef.current);
+    
+    // Add all suggestions from the API to the editor's plugin
+    specificEdits.forEach(edit => {
+      if (edit.original && edit.suggestion) {
+        managerRef.current.addTextSuggestions(edit.original, edit.suggestion, edit.editType || 'Line');
+      }
+    });
 
-    // Add new suggestions using the manager (same as test page)
-    if (mode === "Specific Edits" && specificEdits.length > 0 && showHighlights) {
-      specificEdits.forEach(edit => {
-        if (edit.original && edit.suggestion && (!edit.state || edit.state === 'pending')) {
-          managerRef.current.addTextSuggestions(
-            edit.original,
-            edit.suggestion,
-            edit.editType || 'Line'
-          );
-        }
-      });
-      setEditorLog(l => [...l, `🎨 Applied ${specificEdits.length} suggestions via SuggestionManager`]);
-      console.log(`🎨 Applied ${specificEdits.length} suggestions via SuggestionManager`);
-    }
-  }, [specificEdits, showHighlights, mode, proseMirrorInitialised]);
+    // Use a brief timeout to allow ProseMirror's transaction to apply and resolve conflicts.
+    setTimeout(() => {
+      if (viewRef.current) {
+        // Get the TRUE list of suggestions that actually exist in the editor.
+        const finalEditorSuggestions = getSuggestions(viewRef.current.state);
+        const finalSuggestionOriginals = new Set(finalEditorSuggestions.map(s => s.original.trim()));
+
+        // Filter the UI's list to match the editor's real list.
+        const filteredUiSuggestions = specificEdits.map(uiSug => {
+          // Mark suggestions that were discarded by the editor so we don't process them again.
+          if (finalSuggestionOriginals.has(uiSug.original.trim())) {
+            return { ...uiSug, state: 'synced' }; // Mark as synced
+          }
+          return { ...uiSug, state: 'discarded' }; // Mark as discarded
+        });
+        
+        console.log(`✅ Synchronization Complete. Final list has ${filteredUiSuggestions.length} items.`);
+        
+        // Update the UI state with this final, marked list.
+        // This will only run ONCE per API call, breaking the loop.
+        setSpecificEdits(filteredUiSuggestions);
+      }
+    }, 100);
+  }
+}, [specificEdits, showHighlights, mode, proseMirrorInitialised]);
 
   // ✅ SYNC TEXT STATE WITH PROSEMIRROR WHEN TEXT CHANGES EXTERNALLY
   useEffect(() => {
@@ -200,17 +225,18 @@ export default function Home() {
     setText(newText);
   }, []);
 
+  // ✅ FIXED: These functions now have the correct dependencies to avoid stale state.
   const handleAcceptSpecific = useCallback((id) => {
     acceptSpecific(id);
-  }, [specificEdits]); // ✅ FIXED: Include specificEdits in dependency array
+  }, [specificEdits]);
 
   const handleRejectSpecific = useCallback((id) => {
     rejectSpecific(id);
-  }, []);
+  }, [specificEdits]);
 
   const handleReviseSpecific = useCallback((id) => {
     reviseSpecific(id);
-  }, []);
+  }, [specificEdits]);
 
   // Empty callbacks for writing mode
   const emptyCallback = useCallback(() => {}, []);
@@ -752,26 +778,41 @@ export default function Home() {
     )
   }
 
-  // ✅ DEMO AND DEBUG FUNCTIONS
-  const loadDemoSuggestions = () => {
-    if (!managerRef.current) {
-      console.error("❌ SuggestionManager not available");
-      return;
-    }
-    managerRef.current.loadDemoSuggestions();
-    setEditorLog(l => [...l, "🎨 Demo suggestions loaded"]);
-    console.log("🎨 Demo suggestions loaded via SuggestionManager");
-  };
+ // ✅ DEMO AND DEBUG FUNCTIONS
+ const loadDemoSuggestions = () => {
+  if (!viewRef.current || !managerRef.current) {
+    console.error("Editor not ready for demo.");
+    return;
+  }
 
-  const clearAllHighlights = () => {
-    if (!viewRef.current) {
-      console.error("❌ ProseMirror view not available");
-      return;
+  // The demo text that the suggestions are based on
+  const demoText = "Looking down at the churning sea below, she stood at the edge as the wind was blowing very hard through her hair.";
+
+  // 1. Set the React state. This will cause the editor to update via useEffect.
+  console.log("📝 Setting editor content to demo text...");
+  setText(demoText);
+
+  // 2. After a short delay to allow React to re-render and the editor to sync,
+  // load the suggestions that correspond to the new text.
+  setTimeout(() => {
+    if (managerRef.current) {
+      // The manager will now find the demo text and apply highlights correctly.
+      managerRef.current.loadDemoSuggestions();
+      setEditorLog(l => [...l, "🎨 Demo suggestions loaded and highlights applied."]);
+      console.log("🎨 Demo suggestions loaded and highlights applied.");
     }
-    clearAllSuggestions(viewRef.current);
-    setEditorLog(l => [...l, "🧹 Cleared all highlights"]);
-    console.log("🧹 Cleared all highlights");
-  };
+  }, 100); // 100ms delay for safety
+};
+
+const clearAllHighlights = () => {
+  if (!viewRef.current) {
+    console.error("❌ ProseMirror view not available");
+    return;
+  }
+  clearAllSuggestions(viewRef.current);
+  setEditorLog(l => [...l, "🧹 Cleared all highlights"]);
+  console.log("🧹 Cleared all highlights");
+};
 
   // --- UI ---
   return (
@@ -1081,7 +1122,7 @@ export default function Home() {
                   {/* Specific Edits Panel */}
                   {mode === "Specific Edits" && (
                     <SpecificEditsPanel
-                      suggestions={specificEdits}
+                      suggestions={specificEdits.filter(s => s.state !== 'discarded')}
                       onAccept={handleAcceptSpecific}
                       onReject={handleRejectSpecific}
                       onRevise={handleReviseSpecific}
