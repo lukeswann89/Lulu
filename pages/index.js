@@ -104,7 +104,7 @@ export default function Home() {
     };
 
     // Create initial document from current text
-    const doc = createDocFromText(luluSchema, text || "Welcome to Lulu! Start typing your manuscript here...");
+    const doc = createDocFromText(luluSchema, text || "");
 
     const state = EditorState.create({
       doc,
