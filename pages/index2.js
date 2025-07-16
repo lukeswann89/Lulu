@@ -16,6 +16,7 @@ import {
 } from "../plugins/coreSuggestionPlugin";
 import { docToText, createDocFromText, findPositionOfText } from "../utils/prosemirrorHelpers";
 import { ConflictGrouper } from '../utils/conflictGrouper';
+import { generateSuggestionId } from '../utils/suggestionIdGenerator.js';
 
 // UI & Helper Imports
 import { EDIT_TYPES, getEditMeta } from '../utils/editorConfig';
@@ -88,13 +89,61 @@ function IndexV2() {
     const view = viewRef.current;
     if (!view) { setLoading(false); return; }
 
-    const mockApiResponse = [
-        { original: "a very tired man", suggestion: "an exhausted man", editType: "Line", why: "More concise.", id: "sug1" },
-        { original: "very tired man", suggestion: "tired man, weary from a sleepless night,", editType: "Line", why: "More descriptive.", id: "sug2" },
-        { original: "He was very sad.", suggestion: "He was melancholy.", editType: "Copy", id: "sug3" }
-    ];
+    const manuscriptContent = docToText(view.state.doc);
+    let suggestionsFromApi = [];
 
-    const suggestionsWithLivePositions = mockApiResponse.map(sug => {
+    try {
+        setEditorLog(l => [...l, 'Submitting to Lulu AI...']);
+
+        const response = await fetch('/api/specific-edits', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: manuscriptContent,
+                mode: 'Specific Edits',
+                editType: ["Developmental", "Structural", "Line", "Copy", "Proofreading"]
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API request failed: ${response.status} ${errorText}`);
+        }
+
+        const apiResult = await response.json();
+
+        if (apiResult && apiResult.suggestions) {
+            if (Array.isArray(apiResult.suggestions)) {
+                suggestionsFromApi = apiResult.suggestions;
+            } else if (typeof apiResult.suggestions === 'object' && apiResult.suggestions !== null) {
+                suggestionsFromApi = Object.values(apiResult.suggestions).flat();
+            } else {
+                throw new Error("The 'suggestions' key in the API response was not in a recognized format (array or object).");
+            }
+        } else {
+            throw new Error("API response did not contain a 'suggestions' key.");
+        }
+
+        setEditorLog(l => [...l, `Lulu's AI returned ${suggestionsFromApi.length} raw suggestions.`]);
+
+    } catch (error) {
+        console.error("Error fetching suggestions from API:", error);
+        setEditorLog(l => [...l, `❌ Error: ${error.message}`]);
+        setLoading(false);
+        return;
+    }
+
+    // --- FINALIZED LOGIC ---
+    // Step 1: Give every raw suggestion from the API a unique and stable ID.
+    // This resolves the "double-click" bug by ensuring the panel has the ID from the start.
+    const suggestionsWithIds = suggestionsFromApi.map(sug => ({
+        ...sug,
+        id: generateSuggestionId(sug.original, sug.suggestion)
+    }));
+    setEditorLog(l => [...l, `Assigned unique IDs to ${suggestionsWithIds.length} suggestions.`]);
+
+    // Step 2: Now, find the ProseMirror position for each newly-identified suggestion.
+    const suggestionsWithPmPositions = suggestionsWithIds.map(sug => {
         const position = findPositionOfText(view.state.doc, sug.original);
         if (position) {
             return { ...sug, from: position.from, to: position.to };
@@ -103,14 +152,11 @@ function IndexV2() {
         return null;
     }).filter(Boolean);
 
-    // --- THIS IS THE FINAL, CRITICAL CHANGE ---
-    // We now perform the grouping logic here, before setting any state.
-    const groupedSuggestions = ConflictGrouper.groupOverlaps(suggestionsWithLivePositions);
+    setEditorLog(l => [...l, `Translated ${suggestionsWithPmPositions.length} suggestions into ProseMirror positions.`]);
 
-    // The React state is now set with the FINAL, grouped data.
-    // This makes React the single source of truth.
+    const groupedSuggestions = ConflictGrouper.groupOverlaps(suggestionsWithPmPositions);
+
     setSuggestions(groupedSuggestions);
-
     setEditorLog(l => [...l, `🧠 Conscious mind processed ${groupedSuggestions.length} final suggestion items.`]);
 
     setLoading(false);
