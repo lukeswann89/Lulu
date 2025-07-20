@@ -19,21 +19,33 @@ import { ConflictGrouper } from '../utils/conflictGrouper';
 import { generateSuggestionId } from '../utils/suggestionIdGenerator.js';
 
 // UI & Helper Imports
-import { EDIT_TYPES, getEditMeta } from '../utils/editorConfig';
+import { getEditMeta } from '../utils/editorConfig';
 import SpecificEditsPanel from '../components/SpecificEditsPanel';
 import SuggestionConflictCard from '../components/SuggestionConflictCard';
+import EditorialPlanner from '../components/EditorialPlanner';
+import WorkflowTracker from '../components/WorkflowTracker';
+
+// Workflow Imports
+import { useWorkflow } from '../context/WorkflowContext';
+import { useWorkflowActions } from '../hooks/useWorkflowActions';
 
 
 function IndexV2() {
-    const [text, setText] = useState("The detective, a very tired man, walked into the room. He was very sad.");
-    const [loading, setLoading] = useState(false);
+    // --- Connect to the Workflow "Mind" and "Will" ---
+    const { state: workflowState } = useWorkflow();
+    const actions = useWorkflowActions();
+    const { currentPhase, isProcessing, workflowPhases } = workflowState;
+
+    // --- Component-Specific State ---
+    const [manuscriptText, setManuscriptText] = useState("The report she submitted was very, really unprofessional.");
     const [suggestions, setSuggestions] = useState([]);
     const [activeConflictGroup, setActiveConflictGroup] = useState(null);
-    const [showEditOptions, setShowEditOptions] = useState(true);
     const [editorLog, setEditorLog] = useState([]);
     const editorContainerRef = useRef(null);
     const viewRef = useRef(null);
 
+
+    // --- ProseMirror Initialization Effect ---
     useEffect(() => {
         if (!editorContainerRef.current || viewRef.current) return;
 
@@ -46,7 +58,7 @@ function IndexV2() {
             handleAcceptChoice(suggestionId);
         };
 
-        const doc = createDocFromText(luluSchema, text);
+        const doc = createDocFromText(luluSchema, manuscriptText);
 
         const state = EditorState.create({
             doc,
@@ -63,7 +75,7 @@ function IndexV2() {
                 view.updateState(newState);
                 if (tr.docChanged) {
                     const newText = docToText(newState.doc);
-                    setText(newText);
+                    setManuscriptText(newText);
                 }
             },
         });
@@ -75,114 +87,87 @@ function IndexV2() {
         return () => { view.destroy(); viewRef.current = null; };
     }, []);
 
+    // --- Suggestion Update & Reset Effect ---
     useEffect(() => {
         const view = viewRef.current;
         if (!view) return;
+
+        // --- FIXED: Add a "circuit breaker" to prevent an infinite loop ---
+        if (currentPhase === 'assessment' && suggestions.length > 0) {
+            setSuggestions([]);
+            // Return early to avoid running the rest of the effect
+            return;
+        }
+
         pmSetSuggestions(view, suggestions);
         setEditorLog(l => [...l, `🧠 Deep Brain updated. Drawing ${suggestions.length} highlights.`]);
-    }, [suggestions]);
+    }, [suggestions, currentPhase]);
 
-    async function handleSubmit() {
-    setLoading(true);
-    setActiveConflictGroup(null);
+    // --- Workflow Phase Change Effect ---
+    useEffect(() => {
+        const handlePhaseChange = async () => {
+            if (currentPhase !== 'assessment' && currentPhase !== 'complete') {
+                setEditorLog(l => [...l, `Phase changed to '${currentPhase}'. Fetching suggestions...`]);
+                
+                const newSuggestions = await actions.fetchSuggestionsForPhase(manuscriptText);
+                
+                const suggestionsWithIds = newSuggestions.map(sug => ({
+                    ...sug,
+                    id: generateSuggestionId(sug.original, sug.suggestion)
+                }));
 
-    const view = viewRef.current;
-    if (!view) { setLoading(false); return; }
-
-    const manuscriptContent = docToText(view.state.doc);
-    let suggestionsFromApi = [];
-
-    try {
-        setEditorLog(l => [...l, 'Submitting to Lulu AI...']);
-
-        const response = await fetch('/api/specific-edits', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                text: manuscriptContent,
-                mode: 'Specific Edits',
-                editType: ["Developmental", "Structural", "Line", "Copy", "Proofreading"]
-            }),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API request failed: ${response.status} ${errorText}`);
-        }
-
-        const apiResult = await response.json();
-
-        if (apiResult && apiResult.suggestions) {
-            if (Array.isArray(apiResult.suggestions)) {
-                suggestionsFromApi = apiResult.suggestions;
-            } else if (typeof apiResult.suggestions === 'object' && apiResult.suggestions !== null) {
-                suggestionsFromApi = Object.values(apiResult.suggestions).flat();
-            } else {
-                throw new Error("The 'suggestions' key in the API response was not in a recognized format (array or object).");
+                const suggestionsWithPmPositions = suggestionsWithIds.map(sug => {
+                    if (!viewRef.current) return null;
+                    const position = findPositionOfText(viewRef.current.state.doc, sug.original);
+                    if (position) {
+                        return { ...sug, from: position.from, to: position.to };
+                    }
+                    return null;
+                }).filter(Boolean);
+                
+                const groupedSuggestions = ConflictGrouper.groupOverlaps(suggestionsWithPmPositions);
+                
+                setSuggestions(groupedSuggestions);
             }
-        } else {
-            throw new Error("API response did not contain a 'suggestions' key.");
-        }
+        };
 
-        setEditorLog(l => [...l, `Lulu's AI returned ${suggestionsFromApi.length} raw suggestions.`]);
+        handlePhaseChange();
+    }, [currentPhase]);
 
-    } catch (error) {
-        console.error("Error fetching suggestions from API:", error);
-        setEditorLog(l => [...l, `❌ Error: ${error.message}`]);
-        setLoading(false);
-        return;
-    }
 
-    // --- FINALIZED LOGIC ---
-    // Step 1: Give every raw suggestion from the API a unique and stable ID.
-    // This resolves the "double-click" bug by ensuring the panel has the ID from the start.
-    const suggestionsWithIds = suggestionsFromApi.map(sug => ({
-        ...sug,
-        id: generateSuggestionId(sug.original, sug.suggestion)
-    }));
-    setEditorLog(l => [...l, `Assigned unique IDs to ${suggestionsWithIds.length} suggestions.`]);
-
-    // Step 2: Now, find the ProseMirror position for each newly-identified suggestion.
-    const suggestionsWithPmPositions = suggestionsWithIds.map(sug => {
-        const position = findPositionOfText(view.state.doc, sug.original);
-        if (position) {
-            return { ...sug, from: position.from, to: position.to };
-        }
-        console.warn(`Could not find text for suggestion: "${sug.original}"`);
-        return null;
-    }).filter(Boolean);
-
-    setEditorLog(l => [...l, `Translated ${suggestionsWithPmPositions.length} suggestions into ProseMirror positions.`]);
-
-    const groupedSuggestions = ConflictGrouper.groupOverlaps(suggestionsWithPmPositions);
-
-    setSuggestions(groupedSuggestions);
-    setEditorLog(l => [...l, `🧠 Conscious mind processed ${groupedSuggestions.length} final suggestion items.`]);
-
-    setLoading(false);
-    setShowEditOptions(false);
-}
-
+    // --- Action Handlers ---
     const handleAcceptChoice = useCallback((suggestionId) => {
-    const view = viewRef.current;
-    if (!view) return;
+        const view = viewRef.current;
+        if (!view) return;
 
-    setEditorLog(l => [...l, `✨ User chose path: ${suggestionId}`]);
-    pmAcceptSuggestion(view, suggestionId);
+        setEditorLog(l => [...l, `✨ User chose path: ${suggestionId}`]);
+        pmAcceptSuggestion(view, suggestionId);
 
-    const newPluginState = coreSuggestionPluginKey.getState(view.state);
+        const newPluginState = coreSuggestionPluginKey.getState(view.state);
+        if (newPluginState) {
+            setSuggestions(newPluginState.suggestions);
+        } else {
+            console.error("Could not find plugin state after acceptance.");
+            setSuggestions([]);
+        }
+        setActiveConflictGroup(null);
+    }, []);
 
-    if (newPluginState) {
-        setSuggestions(newPluginState.suggestions);
-    } else {
-        console.error("Could not find plugin state after acceptance.");
-        setSuggestions([]); // Fallback to an empty array
-    }
+    
+    // --- RENDER ---
+    const phaseDisplayNames = {
+        developmental: 'Developmental',
+        structural: 'Structural',
+        line: 'Line Edit',
+        copy: 'Copy Edit',
+        proof: 'Proofreading',
+    };
+    const currentIndex = workflowPhases.indexOf(currentPhase);
+    const nextPhase = currentIndex < workflowPhases.length - 1 ? workflowPhases[currentIndex + 1] : null;
+    const currentPhaseDisplay = phaseDisplayNames[currentPhase] || currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1);
+    const nextPhaseDisplay = nextPhase ? (phaseDisplayNames[nextPhase] || nextPhase.charAt(0).toUpperCase() + nextPhase.slice(1)) : '';
 
-    setActiveConflictGroup(null);
-}, []);
 
-    // --- RESTORED: The complete JSX for rendering the UI ---
     return (
         <div className="min-h-screen bg-gray-100 p-4 md:p-8">
             <div className="max-w-7xl mx-auto">
@@ -193,67 +178,72 @@ function IndexV2() {
                         <label className="font-semibold block mb-1 text-lg">Your Manuscript</label>
                         <div ref={editorContainerRef} className="border rounded min-h-[400px] p-3 whitespace-pre-wrap font-serif focus:outline-none focus:ring-2 focus:ring-purple-400" />
                         <style jsx global>{`
-                           .suggestion-highlight { background: rgba(255, 235, 59, 0.5); cursor: pointer; border-bottom: 2px solid rgba(234, 179, 8, 0.7); }
-                           .conflict-highlight { background: rgba(192, 132, 252, 0.4); border-bottom: 2px solid rgba(126, 34, 206, 0.6); }
-                           .ProseMirror { outline: none; }
-                           .ProseMirror p { margin: 0.5em 0; }
-                         `}</style>
+                            .suggestion-highlight { background: rgba(255, 235, 59, 0.5); cursor: pointer; border-bottom: 2px solid rgba(234, 179, 8, 0.7); }
+                            .conflict-highlight { background: rgba(192, 132, 252, 0.4); border-bottom: 2px solid rgba(126, 34, 206, 0.6); }
+                            .ProseMirror { outline: none; }
+                            .ProseMirror p { margin: 0.5em 0; }
+                        `}</style>
                         <div className="mt-4">
-                           <details className="bg-gray-50 border rounded p-2">
-                               <summary className="text-sm font-medium cursor-pointer">Developer Log ({editorLog.length})</summary>
-                               <div className="mt-2 text-xs max-h-32 overflow-auto">
-                                   {editorLog.slice(-15).reverse().map((entry, idx) => ( <div key={idx} className="py-1 border-b">{entry}</div> ))}
-                               </div>
-                           </details>
+                            <details className="bg-gray-50 border rounded p-2">
+                                <summary className="text-sm font-medium cursor-pointer">Developer Log ({editorLog.length})</summary>
+                                <div className="mt-2 text-xs max-h-32 overflow-auto">
+                                    {editorLog.slice(-15).reverse().map((entry, idx) => ( <div key={idx} className="py-1 border-b">{entry}</div> ))}
+                                </div>
+                            </details>
                         </div>
                     </div>
 
-                    {/* RHS: Options + Suggestion Panel */}
+                    {/* RHS: Workflow & Suggestion Panel */}
                     <div className="w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit min-w-[24rem]">
-                        {showEditOptions ? (
-                            <button onClick={handleSubmit} disabled={loading} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold w-full">
-                                {loading ? "Thinking..." : "Submit to Lulu (Test Conflict)"}
+                      {currentPhase === 'assessment' ? (
+                        <EditorialPlanner manuscriptText={manuscriptText} />
+                      ) : isProcessing ? (
+                        <div className="p-4 text-center">
+                          <p className="text-lg font-semibold animate-pulse text-purple-700">Fetching Suggestions...</p>
+                          <p className="text-sm text-gray-500 mt-2">Lulu is beginning the '{currentPhaseDisplay}' edit.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <WorkflowTracker />
+                          <div className="flex justify-between items-center my-4">
+                            <h3 className="text-xl font-bold text-gray-800">Suggestions</h3>
+                            <button
+                              className="text-xs text-purple-600 hover:underline"
+                              onClick={actions.resetWorkflow}
+                            >
+                              &larr; Start Over
                             </button>
-                        ) : (
-                            <>
+                          </div>
+                          
+                          {activeConflictGroup ? (
+                            <SuggestionConflictCard
+                              conflictGroup={activeConflictGroup}
+                              onAccept={handleAcceptChoice}
+                            />
+                          ) : (
+                            <SpecificEditsPanel
+                              suggestions={suggestions}
+                              onAccept={handleAcceptChoice}
+                              onReject={() => {}}
+                              onRevise={() => {}}
+                              getEditMeta={getEditMeta}
+                            />
+                          )}
+
+                          {nextPhase && nextPhase !== 'complete' && (
+                            <div className="mt-6 pt-6 border-t border-gray-200">
                                 <button
-    className="mb-6 px-4 py-2 bg-purple-600 text-white rounded font-semibold"
-    onClick={() => {
-        const view = viewRef.current;
-        if (!view) return;
-
-        // 1. Create a new document from the initial text
-        const initialText = "The detective, a very tired man, walked into the room. He was very sad.";
-        const newDoc = createDocFromText(luluSchema, initialText);
-
-        // 2. Create and dispatch a transaction to replace the entire document content
-        const tr = view.state.tr.replaceWith(0, view.state.doc.content.size, newDoc.content);
-        view.dispatch(tr);
-
-        // 3. Reset the React UI state
-        setShowEditOptions(true);
-        setSuggestions([]);
-        setActiveConflictGroup(null);
-    }}
->
-    &larr; Start Over
-</button>
-                                {activeConflictGroup ? (
-                                    <SuggestionConflictCard
-                                        conflictGroup={activeConflictGroup}
-                                        onAccept={handleAcceptChoice}
-                                    />
-                                ) : (
-                                    <SpecificEditsPanel
-                                        suggestions={suggestions.filter(s => !s.isConflictGroup)}
-                                        onAccept={handleAcceptChoice}
-                                        onReject={() => {}}
-                                        onRevise={() => {}}
-                                        getEditMeta={getEditMeta}
-                                    />
-                                )}
-                            </>
-                        )}
+                                    onClick={actions.completeCurrentPhase}
+                                    className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <span>Complete {currentPhaseDisplay}</span>
+                                    <span className="text-xl">&rarr;</span>
+                                    <span>Proceed to {nextPhaseDisplay}</span>
+                                </button>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                 </div>
             </div>

@@ -1,36 +1,31 @@
-// /components/WorkflowAssessment.jsx
+// /components/AssessmentPanel.jsx
 "use client";
 
 import React from 'react';
 import { useWorkflow } from '../context/WorkflowContext';
 import { useWorkflowActions } from '../hooks/useWorkflowActions';
 
-// This component is now 'connected' to our workflow engine.
-// It no longer needs a long list of props because it can get state
-// and actions directly from our custom hooks.
-export default function WorkflowAssessment({ manuscriptText }) {
+export default function AssessmentPanel({ manuscriptText }) {
   // Connect to the "Mind" to get the current state
   const { state } = useWorkflow();
   const { isProcessing, manuscriptAnalysis } = state;
 
   // Connect to the "Will" to get the actions we can perform
-  const actions = useWorkflowActions();
+  const { startAnalysis, acceptRecommendation } = useWorkflowActions();
 
-  const handleAnalyzeClick = () => {
-    // We simply call the action from our actions hook.
-    // This component doesn't need to know HOW the analysis is done.
-    actions.startAnalysis(manuscriptText);
+  // Handler for the main action button
+  const handleStartClick = () => {
+    startAnalysis(manuscriptText);
   };
 
+  // Handler for accepting the recommended workflow
   const handleAcceptClick = () => {
-    // The component tells the "Will" the user's intent.
-    // The "Will" then commands the "Mind" to change the workflow.
-    actions.acceptRecommendation('pro');
+    // For now, we'll hard-code the 'pro' workflow as the recommendation
+    acceptRecommendation('pro');
   };
 
-  // --- Conditional Rendering based on state from the Context ---
+  // --- Render logic based on the current state ---
 
-  // State 1: The analysis is running
   if (isProcessing) {
     return (
       <div className="p-4 text-center">
@@ -40,7 +35,6 @@ export default function WorkflowAssessment({ manuscriptText }) {
     );
   }
 
-  // State 2: The analysis is complete and we have a result
   if (manuscriptAnalysis) {
     return (
       <div className="p-4">
@@ -62,7 +56,6 @@ export default function WorkflowAssessment({ manuscriptText }) {
     );
   }
 
-  // State 3: The initial, default view
   return (
     <div className="p-4">
       <h3 className="text-xl font-bold text-gray-800 mb-2">Begin Editing</h3>
@@ -70,8 +63,8 @@ export default function WorkflowAssessment({ manuscriptText }) {
         Start by letting Lulu analyze your manuscript to recommend a professional editing workflow.
       </p>
       <button
-        onClick={handleAnalyzeClick}
-        disabled={!manuscriptText || manuscriptText.trim().length < 10}
+        onClick={handleStartClick}
+        disabled={!manuscriptText || manuscriptText.trim().length === 0}
         className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
       >
         Analyze Manuscript

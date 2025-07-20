@@ -57,13 +57,35 @@ Proofreading (Final Polish):
 
 ---
 
+CRITICAL EDITING INSTRUCTIONS:
+1.  **Be Surgical and Atomic:** Each JSON object MUST represent a single, atomic, independent edit. DO NOT bundle multiple distinct thoughts (e.g., a grammar fix and a stylistic change) into one suggestion. If you spot two issues, create two separate suggestion objects.
+
+2.  **Keep 'original' Text Minimal:** The "original" text for each suggestion should be the SHORTEST POSSIBLE phrase or clause that is unique enough to be found. Avoid selecting entire sentences if the issue is with a single phrase. This is crucial for creating multiple, distinct highlights.
+
+3.  **Adhere to Strict JSON Format:** Your entire output must be a single, valid JSON array [...]. Do not include any introductory text, commentary, or markdown code fences like \`\`\`json.
+
+---
+EXAMPLE OF ATOMIC EDITS:
+
+For the input text: "The man, who was very tired, walked sadly into the big room."
+
+A BAD, bundled suggestion would be:
+{ "original": "The man, who was very tired, walked sadly into the big room.", "suggestion": "The exhausted man trudged into the spacious room." }
+
+A GOOD, atomic set of suggestions would be:
+[
+  { "original": ", who was very tired,", "suggestion": " exhausted", "why": "Removes the clause for better pacing.", "editType": "Line" },
+  { "original": "walked sadly", "suggestion": "trudged", "why": "Uses a stronger, more evocative verb.", "editType": "Line" },
+  { "original": "big", "suggestion": "spacious", "why": "Uses a more descriptive adjective.", "editType": "Copy" }
+]
+---
+
 How to Present Edits:
 For each edit:
 - Present the original text alongside the suggested revision.
-- Provide a succinct yet insightful justification grounded in literary standards, market appeal, or reader psychology.
+- Provide a succinct yet insightful justification ("why").
 - Specify the edit type: Developmental, Structural, Line, Copy, Proofreading.
 - Maintain the author’s voice; enhance, don’t override.
-- Aim for depth, clarity, and actionable guidance, making your edits responsive to the manuscript’s actual needs rather than a predetermined count.
 
 Format all output as a JSON array of suggestions, where each suggestion includes:
 - editType: "Developmental", "Structural", "Line", "Copy", or "Proofreading"

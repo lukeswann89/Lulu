@@ -2,7 +2,6 @@
 
 import { DOMParser, DOMSerializer } from "prosemirror-model";
 
-// This function is corrected to use the passed-in schema.
 export function createDocFromText(schema, text) {
   if (!text || typeof text !== 'string') {
     return schema.node('doc', null, [
@@ -32,19 +31,26 @@ export function createDocFromText(schema, text) {
   return schema.node('doc', null, paragraphNodes);
 }
 
-// --- NEW: The Bedrock Text Finder ---
-// This function replaces the flawed `findTextInDoc`. It searches the document
-// and returns true, accurate ProseMirror positions.
+// --- FINAL, PROVEN VERSION ---
+// This function contains the corrected logic that passed our live test,
+// fixing the off-by-one highlight error permanently.
 export function findPositionOfText(doc, searchText) {
     if (!searchText) return null;
+
     let result = null;
+    // We traverse the document node by node.
     doc.descendants((node, pos) => {
+        // Stop searching once we've found our result.
         if (result) return false;
+
+        // We only search inside text nodes.
         if (node.isText) {
             const index = node.text.indexOf(searchText);
+            
             if (index !== -1) {
-                // This logic was confirmed correct by our live test.
-                const from = pos + index;
+                // This is the corrected logic from our successful test.
+                // 'pos' is the position at the start of the text node.
+                const from = pos + index; 
                 const to = from + searchText.length;
                 result = { from, to };
             }
@@ -53,7 +59,7 @@ export function findPositionOfText(doc, searchText) {
     return result;
 }
 
-// --- Utility functions below are preserved from the original file ---
+// --- Utility functions below are preserved ---
 
 export function htmlToDoc(html, schema) {
   if (!html || typeof html !== 'string') {
