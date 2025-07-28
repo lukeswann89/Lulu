@@ -1,249 +1,263 @@
 "use client";
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import dynamic from 'next/dynamic';
-
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 // ProseMirror Core Imports
 import { EditorState } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { luluSchema } from "../schemas/luluSchema";
-
-// Lulu's Conscience Imports
 import {
     createCoreSuggestionPlugin,
+    coreSuggestionPluginKey,
     acceptSuggestion as pmAcceptSuggestion,
-    setSuggestions as pmSetSuggestions,
-    coreSuggestionPluginKey
+    setSuggestions as pmSetSuggestions
 } from "../plugins/coreSuggestionPlugin";
-import { docToText, createDocFromText, findPositionOfText } from "../utils/prosemirrorHelpers";
+import { createDocFromText, docToText, findPositionOfText } from "../utils/prosemirrorHelpers";
 import { ConflictGrouper } from '../utils/conflictGrouper';
-import { generateSuggestionId } from '../utils/suggestionIdGenerator.js';
-
 // UI & Helper Imports
 import { getEditMeta } from '../utils/editorConfig';
 import SpecificEditsPanel from '../components/SpecificEditsPanel';
 import SuggestionConflictCard from '../components/SuggestionConflictCard';
 import EditorialPlanner from '../components/EditorialPlanner';
-import WorkflowTracker from '../components/WorkflowTracker';
-
+import StrategyCard from '../components/StrategyCard';
 // Workflow Imports
 import { useWorkflow } from '../context/WorkflowContext';
 import { useWorkflowActions } from '../hooks/useWorkflowActions';
 
+const SUBSTANTIVE_PHASES = ['developmental', 'structural'];
+const SENTENCE_LEVEL_PHASES = ['line', 'copy', 'proof'];
 
 function IndexV2() {
-    // --- Connect to the Workflow "Mind" and "Will" ---
     const { state: workflowState } = useWorkflow();
     const actions = useWorkflowActions();
-    const { currentPhase, isProcessing, workflowPhases } = workflowState;
+    const { 
+        currentPhase, 
+        editorialPlan,
+        isProcessing,
+        currentGoalIndex,
+        goalEdits,
+        isFetchingEdits
+    } = workflowState;
 
-    // --- Component-Specific State ---
-    const [manuscriptText, setManuscriptText] = useState("The report she submitted was very, really unprofessional.");
+    const [manuscriptText, setManuscriptText] = useState("Lachesis ran her hand through her hair and focused her pacing gaze on Sylvia's hands. \"And what have you done since you came to this world?\" the Director asked. \"What has seemed to be most important to you?\"");
     const [suggestions, setSuggestions] = useState([]);
     const [activeConflictGroup, setActiveConflictGroup] = useState(null);
-    const [editorLog, setEditorLog] = useState([]);
     const editorContainerRef = useRef(null);
     const viewRef = useRef(null);
+    const sentenceLevelFetchedRef = useRef(new Set()); // Track which phases we've fetched
 
-
-    // --- ProseMirror Initialization Effect ---
+    // ProseMirror Initialization
     useEffect(() => {
-        if (!editorContainerRef.current || viewRef.current) return;
-
-        const handleConflictClick = (conflictGroup) => {
-            setEditorLog(l => [...l, `💡 Conscience: Presenting choice for conflict ${conflictGroup.id}`]);
-            setActiveConflictGroup(conflictGroup);
-        };
-
-        const handleDirectAccept = (suggestionId) => {
-            handleAcceptChoice(suggestionId);
-        };
-
-        const doc = createDocFromText(luluSchema, manuscriptText);
-
-        const state = EditorState.create({
-            doc,
-            plugins: [createCoreSuggestionPlugin({
-                onAccept: handleDirectAccept,
-                onConflictClick: handleConflictClick
-            })],
-        });
-
-        const view = new EditorView(editorContainerRef.current, {
-            state,
-            dispatchTransaction: (tr) => {
-                const newState = view.state.apply(tr);
-                view.updateState(newState);
-                if (tr.docChanged) {
-                    const newText = docToText(newState.doc);
-                    setManuscriptText(newText);
-                }
-            },
-        });
-
-        viewRef.current = view;
-        window.view = view;
-        setEditorLog((l) => [...l, "✅ Editor with Conscience Initialized"]);
-
-        return () => { view.destroy(); viewRef.current = null; };
-    }, []);
-
-    // --- Suggestion Update & Reset Effect ---
-    useEffect(() => {
-        const view = viewRef.current;
-        if (!view) return;
-
-        // --- FIXED: Add a "circuit breaker" to prevent an infinite loop ---
-        if (currentPhase === 'assessment' && suggestions.length > 0) {
-            setSuggestions([]);
-            // Return early to avoid running the rest of the effect
+        console.log('📝 [DEBUG] ProseMirror init effect running');
+        console.log('📝 [DEBUG] editorContainerRef.current:', !!editorContainerRef.current);
+        console.log('📝 [DEBUG] viewRef.current:', !!viewRef.current);
+        
+        if (!editorContainerRef.current || viewRef.current) {
+            console.log('📝 [DEBUG] Skipping ProseMirror initialization - container missing or view exists');
             return;
         }
+        
+        console.log('📝 [DEBUG] Creating ProseMirror editor');
+        const handleConflictClick = (conflictGroup) => { setActiveConflictGroup(conflictGroup); };
+        const handleDirectAccept = (suggestionId) => { handleAcceptChoice(suggestionId); };
 
-        pmSetSuggestions(view, suggestions);
-        setEditorLog(l => [...l, `🧠 Deep Brain updated. Drawing ${suggestions.length} highlights.`]);
-    }, [suggestions, currentPhase]);
+        const state = EditorState.create({
+            doc: createDocFromText(luluSchema, manuscriptText),
+            plugins: [createCoreSuggestionPlugin({ onAccept: handleDirectAccept, onConflictClick: handleConflictClick })],
+        });
 
-    // --- Workflow Phase Change Effect ---
-    useEffect(() => {
-        const handlePhaseChange = async () => {
-            if (currentPhase !== 'assessment' && currentPhase !== 'complete') {
-                setEditorLog(l => [...l, `Phase changed to '${currentPhase}'. Fetching suggestions...`]);
-                
-                const newSuggestions = await actions.fetchSuggestionsForPhase(manuscriptText);
-                
-                const suggestionsWithIds = newSuggestions.map(sug => ({
-                    ...sug,
-                    id: generateSuggestionId(sug.original, sug.suggestion)
-                }));
-
-                const suggestionsWithPmPositions = suggestionsWithIds.map(sug => {
-                    if (!viewRef.current) return null;
-                    const position = findPositionOfText(viewRef.current.state.doc, sug.original);
-                    if (position) {
-                        return { ...sug, from: position.from, to: position.to };
-                    }
-                    return null;
-                }).filter(Boolean);
-                
-                const groupedSuggestions = ConflictGrouper.groupOverlaps(suggestionsWithPmPositions);
-                
-                setSuggestions(groupedSuggestions);
+        const view = new EditorView(editorContainerRef.current, { state, dispatchTransaction: (tr) => {
+            const newState = view.state.apply(tr);
+            view.updateState(newState);
+            if (tr.docChanged) {
+                setManuscriptText(docToText(newState.doc));
             }
+        }});
+
+        viewRef.current = view;
+        console.log('📝 [DEBUG] ProseMirror editor created successfully');
+        
+        return () => { 
+            console.log('📝 [DEBUG] Cleaning up ProseMirror editor');
+            view.destroy(); 
+            viewRef.current = null; 
         };
+    }, []);
 
-        handlePhaseChange();
-    }, [currentPhase]);
+    // Derived State (memoized for stability)
+    const substantiveGoals = useMemo(() => {
+        console.log('🔍 [DEBUG] Editorial plan structure:', editorialPlan);
+        return (editorialPlan || []).filter(goal => {
+            console.log('🔍 [DEBUG] Goal structure:', goal);
+            return goal.type && SUBSTANTIVE_PHASES.includes(goal.type.toLowerCase());
+        });
+    }, [editorialPlan]);
 
+    const currentGoal = useMemo(() =>
+        (currentGoalIndex !== null && substantiveGoals[currentGoalIndex]) ? substantiveGoals[currentGoalIndex] : null,
+        [substantiveGoals, currentGoalIndex]
+    );
 
-    // --- Action Handlers ---
-    const handleAcceptChoice = useCallback((suggestionId) => {
-        const view = viewRef.current;
-        if (!view) return;
+    const nextGoal = useMemo(() =>
+        (currentGoalIndex !== null && substantiveGoals[currentGoalIndex + 1]) ? substantiveGoals[currentGoalIndex + 1] : null,
+        [substantiveGoals, currentGoalIndex]
+    );
 
-        setEditorLog(l => [...l, `✨ User chose path: ${suggestionId}`]);
-        pmAcceptSuggestion(view, suggestionId);
-
-        const newPluginState = coreSuggestionPluginKey.getState(view.state);
-        if (newPluginState) {
-            setSuggestions(newPluginState.suggestions);
-        } else {
-            console.error("Could not find plugin state after acceptance.");
+    // Effect for State Cleanup on Phase Change
+    useEffect(() => {
+        if (currentPhase === 'assessment') {
             setSuggestions([]);
         }
+        // Clear fetch tracking when phase changes
+        sentenceLevelFetchedRef.current.clear();
+        console.log('🧹 [DEBUG] Cleared sentence-level fetch tracking for phase:', currentPhase);
+    }, [currentPhase]);
+
+    // Effect for Data Fetching
+    useEffect(() => {
+        if (SUBSTANTIVE_PHASES.includes(currentPhase)) {
+            if (currentGoal && !goalEdits[currentGoal.id]) {
+                actions.fetchEditsForGoal(currentGoal, manuscriptText);
+            }
+            if (nextGoal && !goalEdits[nextGoal.id]) {
+                actions.prefetchEditsForGoal(nextGoal, manuscriptText);
+            }
+        }
+        
+        if (SENTENCE_LEVEL_PHASES.includes(currentPhase)) {
+            console.log('🎯 [DEBUG] Sentence-level phase detected:', currentPhase);
+            
+            // 🛡️ GUARD: Prevent duplicate fetches for the same phase
+            const phaseKey = `${currentPhase}-${manuscriptText.length}`;
+            if (sentenceLevelFetchedRef.current.has(phaseKey)) {
+                console.log('🎯 [DEBUG] Already fetched suggestions for this phase, skipping');
+                return;
+            }
+            
+            console.log('🎯 [DEBUG] Marking phase as being fetched:', phaseKey);
+            sentenceLevelFetchedRef.current.add(phaseKey);
+            
+            const fetchSentenceLevelEdits = async () => {
+                console.log('🎯 [DEBUG] About to call fetchSuggestionsForPhase');
+                try {
+                    const fetchedSuggestions = await actions.fetchSuggestionsForPhase(manuscriptText);
+                    console.log('🎯 [DEBUG] fetchSuggestionsForPhase returned:', fetchedSuggestions);
+                    
+                    // ✅ Only check if editor is available (removed problematic isMounted check)
+                    if (viewRef.current) {
+                        console.log('🎯 [DEBUG] Editor available, processing suggestions');
+                        console.log('🎯 [DEBUG] viewRef.current.state.doc.content.size:', viewRef.current.state.doc.content.size);
+                        
+                        // SURGICAL FIX: Replace placeholder position mapping with correct findPositionOfText logic
+                        const suggestionsWithPositions = (fetchedSuggestions || []).map(s => {
+                            console.log('🎯 [DEBUG] Processing suggestion:', s);
+                            const position = findPositionOfText(viewRef.current.state.doc, s.original);
+                            if (position) {
+                                console.log('🎯 [DEBUG] Found position for suggestion:', s.original, 'at', position);
+                                return {...s, from: position.from, to: position.to};
+                            } else {
+                                console.warn('🎯 [DEBUG] Could not find position for suggestion:', s.original);
+                                return null;
+                            }
+                        }).filter(Boolean); // Remove null entries where position wasn't found
+                        console.log('🎯 [DEBUG] Suggestions with positions:', suggestionsWithPositions);
+                        
+                        console.log('🎯 [DEBUG] About to call ConflictGrouper.groupOverlaps');
+                        const groupedSuggestions = ConflictGrouper.groupOverlaps(suggestionsWithPositions);
+                        console.log('🎯 [DEBUG] Grouped suggestions:', groupedSuggestions);
+                        
+                        console.log('🎯 [DEBUG] About to call setSuggestions');
+                        setSuggestions(groupedSuggestions);
+                        console.log('🎯 [DEBUG] setSuggestions completed successfully');
+                    } else {
+                        console.log('🎯 [DEBUG] Editor not available, cannot process suggestions');
+                    }
+                } catch (error) {
+                    console.error('🎯 [DEBUG] ERROR in fetchSentenceLevelEdits:', error);
+                }
+            };
+            fetchSentenceLevelEdits();
+        }
+    }, [currentPhase, currentGoal, nextGoal, manuscriptText, goalEdits, actions]);
+
+    // Effect for Updating ProseMirror with Suggestions
+    useEffect(() => {
+        console.log('⚡ [DEBUG] ProseMirror update effect triggered, suggestions:', suggestions);
+        if (!viewRef.current) {
+            console.log('⚡ [DEBUG] No viewRef.current, skipping ProseMirror update');
+            return;
+        }
+        console.log('⚡ [DEBUG] About to call pmSetSuggestions');
+        try {
+            pmSetSuggestions(viewRef.current, suggestions);
+            console.log('⚡ [DEBUG] pmSetSuggestions completed successfully');
+        } catch (error) {
+            console.error('⚡ [DEBUG] ERROR in pmSetSuggestions:', error);
+        }
+    }, [suggestions]);
+
+    // Action Handlers
+    const handleGoalComplete = useCallback(() => { actions.advanceToNextGoal(); }, [actions]);
+
+    const handleAcceptChoice = useCallback((suggestionId) => {
+        if (!viewRef.current) return;
+        pmAcceptSuggestion(viewRef.current, suggestionId);
+        const newPluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
+        setSuggestions(newPluginState ? newPluginState.suggestions : []);
         setActiveConflictGroup(null);
     }, []);
 
-    
-    // --- RENDER ---
-    const phaseDisplayNames = {
-        developmental: 'Developmental',
-        structural: 'Structural',
-        line: 'Line Edit',
-        copy: 'Copy Edit',
-        proof: 'Proofreading',
-    };
-    const currentIndex = workflowPhases.indexOf(currentPhase);
-    const nextPhase = currentIndex < workflowPhases.length - 1 ? workflowPhases[currentIndex + 1] : null;
-    const currentPhaseDisplay = phaseDisplayNames[currentPhase] || currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1);
-    const nextPhaseDisplay = nextPhase ? (phaseDisplayNames[nextPhase] || nextPhase.charAt(0).toUpperCase() + nextPhase.slice(1)) : '';
-
-
+    // Render Logic
     return (
         <div className="min-h-screen bg-gray-100 p-4 md:p-8">
             <div className="max-w-7xl mx-auto">
-                <h1 className="text-4xl font-bold text-center text-purple-700 flex-1 mb-8">Lulu's Conscience</h1>
+                <h1 className="text-4xl font-bold text-center text-purple-700 mb-8">Lulu's Conscience</h1>
                 <div className="flex flex-col md:flex-row gap-6">
-                    {/* LHS: Manuscript Editor */}
                     <div className="flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit">
                         <label className="font-semibold block mb-1 text-lg">Your Manuscript</label>
-                        <div ref={editorContainerRef} className="border rounded min-h-[400px] p-3 whitespace-pre-wrap font-serif focus:outline-none focus:ring-2 focus:ring-purple-400" />
-                        <style jsx global>{`
-                            .suggestion-highlight { background: rgba(255, 235, 59, 0.5); cursor: pointer; border-bottom: 2px solid rgba(234, 179, 8, 0.7); }
-                            .conflict-highlight { background: rgba(192, 132, 252, 0.4); border-bottom: 2px solid rgba(126, 34, 206, 0.6); }
-                            .ProseMirror { outline: none; }
-                            .ProseMirror p { margin: 0.5em 0; }
-                        `}</style>
-                        <div className="mt-4">
-                            <details className="bg-gray-50 border rounded p-2">
-                                <summary className="text-sm font-medium cursor-pointer">Developer Log ({editorLog.length})</summary>
-                                <div className="mt-2 text-xs max-h-32 overflow-auto">
-                                    {editorLog.slice(-15).reverse().map((entry, idx) => ( <div key={idx} className="py-1 border-b">{entry}</div> ))}
-                                </div>
-                            </details>
-                        </div>
+                        <div ref={editorContainerRef} className="border rounded min-h-[400px] p-3" />
                     </div>
 
-                    {/* RHS: Workflow & Suggestion Panel */}
-                    <div className="w-full md:w-[28rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit min-w-[24rem]">
-                      {currentPhase === 'assessment' ? (
-                        <EditorialPlanner manuscriptText={manuscriptText} />
-                      ) : isProcessing ? (
-                        <div className="p-4 text-center">
-                          <p className="text-lg font-semibold animate-pulse text-purple-700">Fetching Suggestions...</p>
-                          <p className="text-sm text-gray-500 mt-2">Lulu is beginning the '{currentPhaseDisplay}' edit.</p>
-                        </div>
-                      ) : (
-                        <>
-                          <WorkflowTracker />
-                          <div className="flex justify-between items-center my-4">
-                            <h3 className="text-xl font-bold text-gray-800">Suggestions</h3>
-                            <button
-                              className="text-xs text-purple-600 hover:underline"
-                              onClick={actions.resetWorkflow}
-                            >
-                              &larr; Start Over
-                            </button>
-                          </div>
-                          
-                          {activeConflictGroup ? (
-                            <SuggestionConflictCard
-                              conflictGroup={activeConflictGroup}
-                              onAccept={handleAcceptChoice}
-                            />
-                          ) : (
-                            <SpecificEditsPanel
-                              suggestions={suggestions}
-                              onAccept={handleAcceptChoice}
-                              onReject={() => {}}
-                              onRevise={() => {}}
-                              getEditMeta={getEditMeta}
-                            />
-                          )}
+                    <div className="w-full md:w-[32rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit min-w-[24rem]">
+                        {currentPhase === 'assessment' && (
+                            <EditorialPlanner manuscriptText={manuscriptText} />
+                        )}
 
-                          {nextPhase && nextPhase !== 'complete' && (
-                            <div className="mt-6 pt-6 border-t border-gray-200">
-                                <button
-                                    onClick={actions.completeCurrentPhase}
-                                    className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <span>Complete {currentPhaseDisplay}</span>
-                                    <span className="text-xl">&rarr;</span>
-                                    <span>Proceed to {nextPhaseDisplay}</span>
-                                </button>
+                        {SUBSTANTIVE_PHASES.includes(currentPhase) && (
+                            <div className="my-4">
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">
+                                    {currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)} Edit ({currentGoalIndex !== null ? currentGoalIndex + 1 : 1} of {substantiveGoals.length})
+                                </h3>
+                                {currentGoal ? (
+                                    <StrategyCard
+                                        key={currentGoal.id}
+                                        goal={currentGoal}
+                                        edits={(goalEdits[currentGoal.id]?.edits) || []}
+                                        isLoading={isFetchingEdits || goalEdits[currentGoal.id]?.status === 'loading'}
+                                        onComplete={handleGoalComplete}
+                                    />
+                                ) : (
+                                    <div className="text-center p-8 bg-green-50 rounded-lg">
+                                        <p className="text-lg font-semibold text-green-800">All substantive goals completed.</p>
+                                        <button onClick={() => actions.completeCurrentPhase()} className="mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">
+                                            Proceed to Next Phase
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                          )}
-                        </>
-                      )}
+                        )}
+                        
+                        {/* --- ARCHITECT'S NOTE: This is the fully restored JSX for the sentence-level edit phases. --- */}
+                        {SENTENCE_LEVEL_PHASES.includes(currentPhase) && (
+                            <>
+                                <h3 className="text-xl font-bold text-gray-800 my-4">{currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)} Edits</h3>
+                                {isProcessing ? (
+                                    <div className="p-4 text-center"><p className="text-lg font-semibold animate-pulse text-purple-700">Fetching Suggestions...</p></div>
+                                ) : activeConflictGroup ? (
+                                    <SuggestionConflictCard conflictGroup={activeConflictGroup} onAccept={handleAcceptChoice} />
+                                ) : (
+                                    <SpecificEditsPanel suggestions={suggestions} onAccept={handleAcceptChoice} onReject={() => {}} onRevise={() => {}} getEditMeta={getEditMeta} />
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -251,4 +265,4 @@ function IndexV2() {
     );
 }
 
-export default dynamic(() => Promise.resolve(IndexV2), { ssr: false });
+export default IndexV2;

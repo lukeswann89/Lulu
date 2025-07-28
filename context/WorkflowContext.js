@@ -1,86 +1,96 @@
-// /context/WorkflowContext.js
 "use client";
 
 import React, { createContext, useContext, useReducer } from 'react';
 import { WORKFLOWS } from '../utils/editorConfig';
 
-// --- The Initial State ---
 export const initialState = {
   currentWorkflow: 'pro',
   currentPhase: 'assessment',
   workflowPhases: WORKFLOWS.pro.phases,
   isProcessing: false,
   error: null,
-  completedPhases: new Set(), // --- The restored property ---
-
-  // State for the "Pre-Flight Briefing"
+  completedPhases: new Set(),
   editorialPlan: null,
-  suggestionPayload: [],
+  currentGoalIndex: null, 
+  goalEdits: {}, 
+  isFetchingEdits: false, 
 };
 
-// --- The Reducer ---
-// The "Mind's" rulebook, updated with the new workflow logic.
 export function workflowReducer(state, action) {
   switch (action.type) {
-    // --- NEW: Actions for the "Pre-Flight Briefing" Workflow ---
     case 'PREPARE_PLAN_START': {
-      return {
-        ...state,
-        isProcessing: true,
-        error: null,
-        editorialPlan: null,
-        suggestionPayload: [],
-      };
+      return { ...state, isProcessing: true, error: null, editorialPlan: null };
     }
     case 'PREPARE_PLAN_SUCCESS': {
       return {
         ...state,
         isProcessing: false,
         editorialPlan: action.payload.editorialPlan,
-        suggestionPayload: action.payload.suggestionPayload,
       };
     }
     case 'PREPARE_PLAN_FAILURE': {
-        return {
-            ...state,
-            isProcessing: false,
-            error: action.payload.error,
-        };
+        return { ...state, isProcessing: false, error: action.payload.error };
     }
-
-    // This action is now triggered by the user approving the Editorial Plan
     case 'EXECUTE_APPROVED_PLAN': {
         const workflowType = action.payload.workflowType || state.currentWorkflow;
         const newWorkflow = WORKFLOWS[workflowType];
         if (!newWorkflow) return state;
-
+        const isSubstantiveWorkflow = newWorkflow.phases.includes('developmental') || newWorkflow.phases.includes('structural');
         return {
             ...state,
             currentWorkflow: workflowType,
             workflowPhases: newWorkflow.phases,
-            currentPhase: newWorkflow.phases[1] || 'complete', // Advance past 'assessment'
-            isProcessing: true, // Enter processing state to fetch the first round of edits
+            currentPhase: newWorkflow.phases[1] || 'complete',
+            currentGoalIndex: isSubstantiveWorkflow ? 0 : null,
         };
     }
-
-    // --- Actions for the Editing Cascade ---
+    case 'FETCH_GOAL_EDITS_START':
+      return {
+        ...state,
+        isFetchingEdits: true,
+        goalEdits: {
+          ...state.goalEdits,
+          [action.payload.goalId]: { status: 'loading', edits: [] },
+        }
+      };
+    case 'FETCH_GOAL_EDITS_SUCCESS':
+      return {
+        ...state,
+        isFetchingEdits: false,
+        goalEdits: {
+          ...state.goalEdits,
+          [action.payload.goalId]: { status: 'loaded', edits: action.payload.edits },
+        }
+      };
+    case 'FETCH_GOAL_EDITS_FAILURE':
+       return {
+        ...state,
+        isFetchingEdits: false,
+        goalEdits: {
+          ...state.goalEdits,
+          [action.payload.goalId]: { status: 'error', edits: [] },
+        }
+      };
+    case 'ADVANCE_GOAL': {
+      if (state.currentGoalIndex === null) return state;
+      const nextIndex = state.currentGoalIndex + 1;
+      const substantiveGoals = (state.editorialPlan || []).filter(goal => 
+          ['developmental', 'structural'].includes(goal.type.toLowerCase())
+      );
+      if (nextIndex >= substantiveGoals.length) {
+        return { ...state, currentGoalIndex: null };
+      }
+      return { ...state, currentGoalIndex: nextIndex };
+    }
     case 'COMPLETE_AND_ADVANCE_PHASE': {
       const completedPhases = new Set(state.completedPhases).add(state.currentPhase);
       const currentIndex = state.workflowPhases.indexOf(state.currentPhase);
-      
       const currentWorkflowPhases = WORKFLOWS[state.currentWorkflow].phases;
       if (currentIndex >= currentWorkflowPhases.length - 1) {
         return { ...state, currentPhase: 'complete', completedPhases, isProcessing: false };
       }
-      
       const nextPhase = currentWorkflowPhases[currentIndex + 1];
-
-      return {
-        ...state,
-        currentPhase: nextPhase,
-        completedPhases,
-        isProcessing: true, // Enter processing state for the next phase
-      };
+      return { ...state, currentPhase: nextPhase, completedPhases, isProcessing: false };
     }
     case 'SET_IS_PROCESSING': {
       return { ...state, isProcessing: action.payload.isProcessing };
@@ -94,19 +104,12 @@ export function workflowReducer(state, action) {
   }
 }
 
-// --- The Context, Provider, and Hook (These remain the same) ---
 export const WorkflowContext = createContext();
-
 export function WorkflowProvider({ children }) {
   const [state, dispatch] = useReducer(workflowReducer, initialState);
   const value = { state, dispatch };
-  return (
-    <WorkflowContext.Provider value={value}>
-      {children}
-    </WorkflowContext.Provider> // --- The corrected closing tag ---
-  );
+  return ( <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider> );
 }
-
 export function useWorkflow() {
   const context = useContext(WorkflowContext);
   if (context === undefined) {

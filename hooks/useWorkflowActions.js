@@ -1,113 +1,142 @@
 // /hooks/useWorkflowActions.js
-import { useCallback } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useWorkflow } from '../context/WorkflowContext';
 
-// --- The "Will": A collection of functions that perform actions ---
+// Map workflow phases to API edit types
+const phaseToEditType = (phase) => {
+  const mapping = {
+    'developmental': 'Developmental',
+    'structural': 'Structural',
+    'line': 'Line',
+    'copy': 'Copy',
+    'proof': 'Proofreading'
+  };
+  return mapping[phase] || phase;
+};
+
 export function useWorkflowActions() {
-  // Connect to the "Mind" to get the state and dispatch function.
   const { state, dispatch } = useWorkflow();
 
-  // --- "Pre-Flight Briefing" Action ---
+  const workflowStateRef = useRef(state);
+  useEffect(() => {
+    workflowStateRef.current = state;
+  }, [state]);
+
+  // This is the full, working version.
   const prepareEditorialPlan = useCallback(async (writerNotes, manuscriptText) => {
     dispatch({ type: 'PREPARE_PLAN_START' });
     try {
-      console.log("Will is consulting the Planner API with notes:", writerNotes);
       const response = await fetch('/api/editorial-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          manuscriptText,
-          writerNotes,
-        }),
+        body: JSON.stringify({ manuscriptText, writerNotes }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'The API request failed.');
-      }
-
+      if (!response.ok) throw new Error('API request failed.');
       const apiResult = await response.json();
-      dispatch({
-        type: 'PREPARE_PLAN_SUCCESS',
-        payload: {
-          editorialPlan: apiResult.editorialPlan,
-          suggestionPayload: apiResult.suggestionPayload
-        }
-      });
+      dispatch({ type: 'PREPARE_PLAN_SUCCESS', payload: { editorialPlan: apiResult.editorialPlan } });
     } catch (error) {
-      console.error('Editorial Plan preparation error:', error);
       dispatch({ type: 'PREPARE_PLAN_FAILURE', payload: { error: error.message } });
     }
   }, [dispatch]);
 
-  // --- NEW: The action to begin the specific edits ---
-  const executeApprovedPlan = useCallback((workflowType) => {
-    // This action correctly includes the payload object.
-    dispatch({
-      type: 'EXECUTE_APPROVED_PLAN',
-      payload: { workflowType }
-    });
-  }, [dispatch]);
-
-
-  // --- Editing Phase Actions ---
+  // This is the stable version that uses the ref and will NOT cause a loop.
   const fetchSuggestionsForPhase = useCallback(async (manuscriptText) => {
-    const phase = state.currentPhase;
-    if (phase === 'assessment' || phase === 'complete') return [];
+    console.log('🔍 [DEBUG] fetchSuggestionsForPhase STARTED');
+    
+    const phase = workflowStateRef.current.currentPhase;
+    console.log('🔍 [DEBUG] Current phase:', phase);
+    
+    if (phase === 'assessment' || phase === 'complete') {
+      console.log('🔍 [DEBUG] Early return for assessment/complete phase');
+      return [];
+    }
 
-    console.log(`Will is fetching suggestions for phase: ${phase}`);
+    console.log('🔍 [DEBUG] Setting isProcessing to true');
     dispatch({ type: 'SET_IS_PROCESSING', payload: { isProcessing: true } });
-
+    
     try {
-      const response = await fetch('/api/specific-edits', {
+      // Convert phase to proper edit type format
+      const editType = phaseToEditType(phase);
+      console.log('🔍 [DEBUG] Mapped editType:', editType);
+      
+      console.log('🔍 [DEBUG] About to call fetch API');
+      // Use the new sentence-level-edits endpoint for cascade workflow
+      const response = await fetch('/api/sentence-level-edits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: manuscriptText,
-          mode: 'Specific Edits',
-          editTypes: [phase]
-        }),
+        body: JSON.stringify({ text: manuscriptText, editTypes: [editType] }),
       });
-
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
-      }
-
-      const apiResult = await response.json();
-      let suggestionsFromApi = [];
-      if (apiResult && apiResult.suggestions) {
-        if (Array.isArray(apiResult.suggestions)) {
-          suggestionsFromApi = apiResult.suggestions;
-        } else if (typeof apiResult.suggestions === 'object' && apiResult.suggestions !== null) {
-          suggestionsFromApi = Object.values(apiResult.suggestions).flat();
-        }
-      }
       
+      console.log('🔍 [DEBUG] Fetch response received, ok:', response.ok);
+      if (!response.ok) throw new Error(`API request failed: ${response.status}`);
+      
+      console.log('🔍 [DEBUG] Parsing JSON response');
+      const apiResult = await response.json();
+      console.log('🔍 [DEBUG] API result:', apiResult);
+      
+      const suggestionsFromApi = apiResult?.suggestions || [];
+      console.log('🔍 [DEBUG] Extracted suggestions:', suggestionsFromApi.length, 'items');
+      
+      console.log('🔍 [DEBUG] Setting isProcessing to false');
       dispatch({ type: 'SET_IS_PROCESSING', payload: { isProcessing: false } });
+      
+      console.log('🔍 [DEBUG] Returning suggestions, fetchSuggestionsForPhase COMPLETED');
       return suggestionsFromApi;
-
     } catch (error) {
-      console.error(`Error fetching suggestions for phase ${phase}:`, error);
+      console.error('🔍 [DEBUG] ERROR in fetchSuggestionsForPhase:', error);
       dispatch({ type: 'SET_IS_PROCESSING', payload: { isProcessing: false } });
       return [];
     }
-  }, [state.currentPhase, dispatch]);
-
-  const completeCurrentPhase = useCallback(() => {
-    dispatch({ type: 'COMPLETE_AND_ADVANCE_PHASE' });
-  }, [dispatch]);
-
-  const resetWorkflow = useCallback(() => {
-    dispatch({ type: 'RESET_WORKFLOW' });
   }, [dispatch]);
 
 
-  // --- Return the public interface for the "Will" ---
+  // All other actions are also included and stable.
+  const fetchEditsForGoal = useCallback(async (goal, manuscriptText) => {
+    dispatch({ type: 'FETCH_GOAL_EDITS_START', payload: { goalId: goal.id } });
+    try {
+      const response = await fetch('/api/get-edits-for-goal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: goal.goal, manuscriptText }),
+      });
+      if (!response.ok) throw new Error('The new intelligence API failed to respond.');
+      const edits = await response.json();
+      dispatch({ type: 'FETCH_GOAL_EDITS_SUCCESS', payload: { goalId: goal.id, edits } });
+    } catch (error) {
+      console.error('Error fetching edits for goal:', error);
+      dispatch({ type: 'FETCH_GOAL_EDITS_FAILURE', payload: { goalId: goal.id } });
+    }
+  }, [dispatch]);
+
+  const prefetchEditsForGoal = useCallback(async (goal, manuscriptText) => {
+    if (workflowStateRef.current.goalEdits[goal.id]) return;
+    try {
+      const response = await fetch('/api/get-edits-for-goal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: goal.goal, manuscriptText }),
+      });
+      if (!response.ok) return;
+      const edits = await response.json();
+      dispatch({ type: 'FETCH_GOAL_EDITS_SUCCESS', payload: { goalId: goal.id, edits } });
+    } catch (error) {
+      console.warn('Sous-Chef pre-fetch failed silently:', error);
+    }
+  }, [dispatch]);
+
+  const executeApprovedPlan = useCallback((workflowType) => { dispatch({ type: 'EXECUTE_APPROVED_PLAN', payload: { workflowType } }); }, [dispatch]);
+  const advanceToNextGoal = useCallback(() => { dispatch({ type: 'ADVANCE_GOAL' }); }, [dispatch]);
+  const completeCurrentPhase = useCallback(() => { dispatch({ type: 'COMPLETE_AND_ADVANCE_PHASE' }); }, [dispatch]);
+  const resetWorkflow = useCallback(() => { dispatch({ type: 'RESET_WORKFLOW' }); }, [dispatch]);
+
   return {
     prepareEditorialPlan,
     executeApprovedPlan,
     fetchSuggestionsForPhase,
     completeCurrentPhase,
     resetWorkflow,
+    fetchEditsForGoal,
+    prefetchEditsForGoal,
+    advanceToNextGoal,
   };
 }

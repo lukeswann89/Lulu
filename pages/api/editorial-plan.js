@@ -1,4 +1,11 @@
 // /api/editorial-plan.js
+/*
+ * ARCHITECTURAL FIX: Added required "type" field to editorial plan goals
+ * Problem: Front-end filtering logic in /pages/index.js expects each goal to have goal.type 
+ * equal to "developmental" or "structural", but the API was not instructing the AI to include this field.
+ * Solution: Modified OpenAI prompt to require "type" field with "Developmental" or "Structural" values.
+ * This ensures proper data flow between API and substantive editing workflow.
+ */
 import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -26,6 +33,7 @@ This must be an array of objects. Each object represents a single, high-level go
 - "id": A unique identifier (e.g., "goal_01").
 - "source": Either "Writer" (if derived from the writer's notes) or "Lulu" (if derived from your own analysis).
 - "goal": A concise, clear string describing the editorial goal (e.g., "Change character name from John to David.").
+- "type": REQUIRED. Must be either "Developmental" (big-picture issues like character development, plot structure, themes) or "Structural" (organization, flow, transitions, paragraph structure). 
 - "isSelected": Set this to true by default.
 
 ---
