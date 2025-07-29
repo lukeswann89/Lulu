@@ -21,6 +21,27 @@ import StrategyCard from '../components/StrategyCard';
 // Workflow Imports
 import { useWorkflow } from '../context/WorkflowContext';
 import { useWorkflowActions } from '../hooks/useWorkflowActions';
+// Sophisticated Writer's Desk Layout Imports
+import WriterDesk from '../components/layout/WriterDesk';
+import MuseWing from '../components/layout/MuseWing';
+import MentorWing from '../components/layout/MentorWing';
+
+/**
+ * IndexV2 - Main application page with sophisticated Writer's Desk layout
+ * 
+ * CHANGES MADE:
+ * - Integrated sophisticated WriterDesk layout with "One Wing" rule
+ * - Restructured render functions for the new three-pane system
+ * - Preserved all existing workflow logic and protected useEffect hooks
+ * - Implemented sacred 800px manuscript width with centered positioning
+ * - Maintained all existing state management and data fetching patterns
+ * 
+ * PROTECTED ELEMENTS (UNCHANGED):
+ * - All useEffect hooks and their dependency arrays
+ * - WorkflowContext integration and useWorkflowActions usage
+ * - ProseMirror initialization and suggestion handling logic
+ * - All existing component integrations and prop passing
+ */
 
 const SUBSTANTIVE_PHASES = ['developmental', 'structural'];
 const SENTENCE_LEVEL_PHASES = ['line', 'copy', 'proof'];
@@ -44,7 +65,7 @@ function IndexV2() {
     const viewRef = useRef(null);
     const sentenceLevelFetchedRef = useRef(new Set()); // Track which phases we've fetched
 
-    // ProseMirror Initialization
+    // ProseMirror Initialization (PROTECTED - UNCHANGED)
     useEffect(() => {
         console.log('📝 [DEBUG] ProseMirror init effect running');
         console.log('📝 [DEBUG] editorContainerRef.current:', !!editorContainerRef.current);
@@ -82,7 +103,7 @@ function IndexV2() {
         };
     }, []);
 
-    // Derived State (memoized for stability)
+    // Derived State (memoized for stability) (PROTECTED - UNCHANGED)
     const substantiveGoals = useMemo(() => {
         console.log('🔍 [DEBUG] Editorial plan structure:', editorialPlan);
         return (editorialPlan || []).filter(goal => {
@@ -101,7 +122,7 @@ function IndexV2() {
         [substantiveGoals, currentGoalIndex]
     );
 
-    // Effect for State Cleanup on Phase Change
+    // Effect for State Cleanup on Phase Change (PROTECTED - UNCHANGED)
     useEffect(() => {
         if (currentPhase === 'assessment') {
             setSuggestions([]);
@@ -111,7 +132,7 @@ function IndexV2() {
         console.log('🧹 [DEBUG] Cleared sentence-level fetch tracking for phase:', currentPhase);
     }, [currentPhase]);
 
-    // Effect for Data Fetching
+    // Effect for Data Fetching (PROTECTED - UNCHANGED)
     useEffect(() => {
         if (SUBSTANTIVE_PHASES.includes(currentPhase)) {
             if (currentGoal && !goalEdits[currentGoal.id]) {
@@ -178,7 +199,7 @@ function IndexV2() {
         }
     }, [currentPhase, currentGoal, nextGoal, manuscriptText, goalEdits, actions]);
 
-    // Effect for Updating ProseMirror with Suggestions
+    // Effect for Updating ProseMirror with Suggestions (PROTECTED - UNCHANGED)
     useEffect(() => {
         console.log('⚡ [DEBUG] ProseMirror update effect triggered, suggestions:', suggestions);
         if (!viewRef.current) {
@@ -194,7 +215,7 @@ function IndexV2() {
         }
     }, [suggestions]);
 
-    // Action Handlers
+    // Action Handlers (PROTECTED - UNCHANGED)
     const handleGoalComplete = useCallback(() => { actions.advanceToNextGoal(); }, [actions]);
 
     const handleAcceptChoice = useCallback((suggestionId) => {
@@ -205,63 +226,111 @@ function IndexV2() {
         setActiveConflictGroup(null);
     }, []);
 
-    // Render Logic
-    return (
-        <div className="min-h-screen bg-gray-100 p-4 md:p-8">
-            <div className="max-w-7xl mx-auto">
-                <h1 className="text-4xl font-bold text-center text-purple-700 mb-8">Lulu's Conscience</h1>
-                <div className="flex flex-col md:flex-row gap-6">
-                    <div className="flex-1 bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit">
-                        <label className="font-semibold block mb-1 text-lg">Your Manuscript</label>
-                        <div ref={editorContainerRef} className="border rounded min-h-[400px] p-3" />
-                    </div>
-
-                    <div className="w-full md:w-[32rem] bg-white shadow rounded-xl p-4 md:sticky md:top-8 h-fit min-w-[24rem]">
-                        {currentPhase === 'assessment' && (
-                            <EditorialPlanner manuscriptText={manuscriptText} />
-                        )}
-
-                        {SUBSTANTIVE_PHASES.includes(currentPhase) && (
-                            <div className="my-4">
-                                <h3 className="text-xl font-bold text-gray-800 mb-2">
-                                    {currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)} Edit ({currentGoalIndex !== null ? currentGoalIndex + 1 : 1} of {substantiveGoals.length})
-                                </h3>
-                                {currentGoal ? (
-                                    <StrategyCard
-                                        key={currentGoal.id}
-                                        goal={currentGoal}
-                                        edits={(goalEdits[currentGoal.id]?.edits) || []}
-                                        isLoading={isFetchingEdits || goalEdits[currentGoal.id]?.status === 'loading'}
-                                        onComplete={handleGoalComplete}
-                                    />
-                                ) : (
-                                    <div className="text-center p-8 bg-green-50 rounded-lg">
-                                        <p className="text-lg font-semibold text-green-800">All substantive goals completed.</p>
-                                        <button onClick={() => actions.completeCurrentPhase()} className="mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">
-                                            Proceed to Next Phase
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        
-                        {/* --- ARCHITECT'S NOTE: This is the fully restored JSX for the sentence-level edit phases. --- */}
-                        {SENTENCE_LEVEL_PHASES.includes(currentPhase) && (
-                            <>
-                                <h3 className="text-xl font-bold text-gray-800 my-4">{currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)} Edits</h3>
-                                {isProcessing ? (
-                                    <div className="p-4 text-center"><p className="text-lg font-semibold animate-pulse text-purple-700">Fetching Suggestions...</p></div>
-                                ) : activeConflictGroup ? (
-                                    <SuggestionConflictCard conflictGroup={activeConflictGroup} onAccept={handleAcceptChoice} />
-                                ) : (
-                                    <SpecificEditsPanel suggestions={suggestions} onAccept={handleAcceptChoice} onReject={() => {}} onRevise={() => {}} getEditMeta={getEditMeta} />
-                                )}
-                            </>
-                        )}
-                    </div>
-                </div>
+    // Render Components for Sophisticated Writer's Desk
+    const renderManuscript = () => (
+        <div className="h-full p-6">
+            {/* Page Header */}
+            <div className="text-center mb-6">
+                <h1 className="text-3xl font-bold text-purple-700 mb-2">Lulu's Conscience</h1>
+                <p className="text-sm text-gray-600">Your Intelligent Writing Companion</p>
+            </div>
+            
+            {/* The Sacred Page - 800px max-width, centered */}
+            <div>
+                <label className="font-semibold text-lg text-gray-800 mb-3 block">Your Manuscript</label>
+                <div 
+                    ref={editorContainerRef} 
+                    className="border border-gray-300 rounded-lg p-4 bg-white focus-within:border-purple-500 transition-colors"
+                    style={{ 
+                        minHeight: '500px',
+                        height: 'calc(100vh - 200px)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                    }}
+                />
             </div>
         </div>
+    );
+
+    const renderMentorContent = () => (
+        <div className="p-6">
+            {currentPhase === 'assessment' && (
+                <div>
+                    <h3 className="text-xl font-bold text-green-800 mb-4">📋 Editorial Assessment</h3>
+                    <EditorialPlanner manuscriptText={manuscriptText} />
+                </div>
+            )}
+
+            {SUBSTANTIVE_PHASES.includes(currentPhase) && (
+                <div>
+                    <h3 className="text-xl font-bold text-green-800 mb-4">
+                        🎯 {currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)} Edit 
+                        ({currentGoalIndex !== null ? currentGoalIndex + 1 : 1} of {substantiveGoals.length})
+                    </h3>
+                    {currentGoal ? (
+                        <StrategyCard
+                            key={currentGoal.id}
+                            goal={currentGoal}
+                            edits={(goalEdits[currentGoal.id]?.edits) || []}
+                            isLoading={isFetchingEdits || goalEdits[currentGoal.id]?.status === 'loading'}
+                            onComplete={handleGoalComplete}
+                        />
+                    ) : (
+                        <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200">
+                            <div className="text-4xl mb-4">✅</div>
+                            <p className="text-lg font-semibold text-green-800 mb-3">All substantive goals completed!</p>
+                            <p className="text-sm text-green-600 mb-4">Ready to proceed to the next editing phase.</p>
+                            <button 
+                                onClick={() => actions.completeCurrentPhase()} 
+                                className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                            >
+                                Proceed to Next Phase
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+            
+            {SENTENCE_LEVEL_PHASES.includes(currentPhase) && (
+                <div>
+                    <h3 className="text-xl font-bold text-green-800 mb-4">
+                        ✏️ {currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)} Edits
+                    </h3>
+                    {isProcessing ? (
+                        <div className="text-center p-8">
+                            <div className="text-4xl mb-4">⏳</div>
+                            <p className="text-lg font-semibold animate-pulse text-green-700">Analyzing your manuscript...</p>
+                            <p className="text-sm text-green-600 mt-2">Generating personalized suggestions</p>
+                        </div>
+                    ) : activeConflictGroup ? (
+                        <div>
+                            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p className="text-sm text-yellow-800">
+                                    <strong>Conflicting suggestions detected.</strong> Please choose the best option.
+                                </p>
+                            </div>
+                            <SuggestionConflictCard conflictGroup={activeConflictGroup} onAccept={handleAcceptChoice} />
+                        </div>
+                    ) : (
+                        <SpecificEditsPanel 
+                            suggestions={suggestions} 
+                            onAccept={handleAcceptChoice} 
+                            onReject={() => {}} 
+                            onRevise={() => {}} 
+                            getEditMeta={getEditMeta} 
+                        />
+                    )}
+                </div>
+            )}
+        </div>
+    );
+
+    // Main Render - Sophisticated Writer's Desk Layout
+    return (
+        <WriterDesk
+            museWing={<MuseWing />}
+            manuscript={renderManuscript()}
+            mentorWing={<MentorWing>{renderMentorContent()}</MentorWing>}
+        />
     );
 }
 
