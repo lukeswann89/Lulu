@@ -2,25 +2,72 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useWorkflow } from '../context/WorkflowContext';
-import { useWorkflowActions } from '../hooks/useWorkflowActions';
 
-// This is the new, primary component for our "Pre-Flight Briefing".
-export default function EditorialPlanner({ manuscriptText }) {
-  // Connect to the "Mind" for state
-  const { state } = useWorkflow();
-  const { isProcessing, editorialPlan, error } = state;
+/**
+ * EditorialPlanner - Refactored to be fully compliant with "Three Pillars" architecture
+ * 
+ * CHANGES MADE:
+ * - Removed direct useWorkflow() and useWorkflowActions() hook usage
+ * - Now accepts editorialPlan, isProcessing, error, and actions as props
+ * - Made component "dumb" - derives all display logic from props
+ * - Maintains only local UI state (writerNotes) that doesn't conflict with global state
+ * - FIXED: Added local state to track goal selection and filter goals before execution
+ * 
+ * Philosophy: This component is now purely controlled by its parent,
+ * eliminating state synchronization conflicts with the global "Mind."
+ */
 
-  // Connect to the "Will" for actions
-  const actions = useWorkflowActions();
+export default function EditorialPlanner({ 
+    manuscriptText, 
+    editorialPlan, 
+    isProcessing, 
+    error, 
+    actions 
+}) {
+    // Local state for the writer's notes input (UI-only state)
+    const [writerNotes, setWriterNotes] = useState('');
+    
+    // Local state to track which goals are selected (TASK 1 FIX)
+    const [selectedGoals, setSelectedGoals] = useState(() => {
+        if (!editorialPlan) return {};
+        const initial = {};
+        editorialPlan.forEach(goal => {
+            initial[goal.id] = goal.isSelected !== false; // Default to true unless explicitly false
+        });
+        return initial;
+    });
 
-  // Local state for the writer's notes input
-  const [writerNotes, setWriterNotes] = useState('');
+    // Update selectedGoals when editorialPlan changes
+    React.useEffect(() => {
+        if (editorialPlan) {
+            const updated = {};
+            editorialPlan.forEach(goal => {
+                updated[goal.id] = selectedGoals[goal.id] !== undefined 
+                    ? selectedGoals[goal.id] 
+                    : (goal.isSelected !== false);
+            });
+            setSelectedGoals(updated);
+        }
+    }, [editorialPlan]);
 
-  // --- UPDATED: This handler now calls the action from our "Will" ---
-  const handlePreparePlan = () => {
-    actions.prepareEditorialPlan(writerNotes, manuscriptText);
-  };
+    // Handle checkbox changes
+    const handleGoalToggle = (goalId) => {
+        setSelectedGoals(prev => ({
+            ...prev,
+            [goalId]: !prev[goalId]
+        }));
+    };
+
+    // Handle executing the approved plan with filtered goals
+    const handleExecuteApprovedPlan = () => {
+        const filteredGoals = editorialPlan.filter(goal => selectedGoals[goal.id]);
+        actions.executeApprovedPlan('pro', filteredGoals);
+    };
+
+    // Handler calls the action from props (no direct hook usage)
+    const handlePreparePlan = () => {
+        actions.prepareEditorialPlan(writerNotes, manuscriptText);
+    };
 
   // --- Render logic for the multi-stage panel ---
 
@@ -37,7 +84,8 @@ export default function EditorialPlanner({ manuscriptText }) {
             <label key={item.id} className="flex items-start gap-3 p-3 bg-white rounded-lg shadow-sm border has-[:checked]:border-purple-400 has-[:checked]:bg-purple-50 transition-all">
               <input
                 type="checkbox"
-                defaultChecked={item.isSelected}
+                checked={selectedGoals[item.id] || false}
+                onChange={() => handleGoalToggle(item.id)}
                 className="mt-1 h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
               />
               <div>
@@ -53,10 +101,10 @@ export default function EditorialPlanner({ manuscriptText }) {
         </div>
 
         <button
-          onClick={() => actions.executeApprovedPlan('pro')}
+          onClick={handleExecuteApprovedPlan}
           className="mt-6 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"
         >
-          Generate Edits for This Plan
+          Generate Edits for This Plan ({Object.values(selectedGoals).filter(Boolean).length} selected)
         </button>
       </div>
     );
@@ -91,13 +139,19 @@ export default function EditorialPlanner({ manuscriptText }) {
         />
       </div>
 
-      <button
-        onClick={handlePreparePlan}
-        disabled={!manuscriptText || manuscriptText.trim().length < 10}
-        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-gray-400"
-      >
-        Consult with Lulu
-      </button>
-    </div>
-  );
-}
+              <button
+          onClick={handlePreparePlan}
+          disabled={!manuscriptText || manuscriptText.trim().length < 10}
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-gray-400"
+        >
+          Consult with Lulu
+        </button>
+        
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+      </div>
+    );
+  }

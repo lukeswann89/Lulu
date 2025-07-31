@@ -1,4 +1,22 @@
 "use client";
+// 
+// ARCHITECTURAL CHANGES - UNIFIED SUGGESTION STATE PATTERN:
+// - Implemented "Unified Suggestion State" pattern to fix ProseMirror integration bug
+// - Renamed 'suggestions' to 'activeSuggestions' as single source of truth for editor state
+// - Both substantive and sentence-level data flows now feed into the same master suggestion list
+// - Single useEffect synchronizes activeSuggestions with ProseMirror plugin via pmSetSuggestions
+// - Eliminates state conflicts between different suggestion sources
+// - Ensures substantive edits are properly highlighted and clickable in the editor
+// - Maintains all existing architectural patterns (Three Pillars, useRef, useMemo)
+//
+// PREVIOUS CHANGES:
+// - Simplified right-panel logic by removing complex JSX conditionals
+// - Replaced complex renderMentorContent() with smart MentorWing component
+// - All mentor-related state management now delegated to MentorWing
+// - Maintained all existing workflow logic and protected useEffect hooks
+// - Passed all necessary state and actions as props to MentorWing
+// - Preserved ProseMirror initialization and suggestion handling
+
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 // ProseMirror Core Imports
 import { EditorState } from "prosemirror-state";
@@ -12,6 +30,7 @@ import {
 } from "../plugins/coreSuggestionPlugin";
 import { createDocFromText, docToText, findPositionOfText } from "../utils/prosemirrorHelpers";
 import { ConflictGrouper } from '../utils/conflictGrouper';
+import { generateSuggestionId } from '../utils/suggestionIdGenerator';
 // UI & Helper Imports
 import { getEditMeta } from '../utils/editorConfig';
 import SpecificEditsPanel from '../components/SpecificEditsPanel';
@@ -28,6 +47,12 @@ import MentorWing from '../components/layout/MentorWing';
 
 /**
  * IndexV2 - Main application page with sophisticated Writer's Desk layout
+ * 
+ * UNIFIED SUGGESTION STATE ARCHITECTURE:
+ * - Single 'activeSuggestions' state as master list for all editor suggestions
+ * - Both substantive and sentence-level flows feed into this unified state
+ * - Single synchronization point with ProseMirror plugin eliminates state conflicts
+ * - Ensures all suggestion types are properly highlighted and interactive
  * 
  * CHANGES MADE:
  * - Integrated sophisticated WriterDesk layout with "One Wing" rule
@@ -55,11 +80,13 @@ function IndexV2() {
         isProcessing,
         currentGoalIndex,
         goalEdits,
-        isFetchingEdits
+        isFetchingEdits,
+        error
     } = workflowState;
 
     const [manuscriptText, setManuscriptText] = useState("Lachesis ran her hand through her hair and focused her pacing gaze on Sylvia's hands. \"And what have you done since you came to this world?\" the Director asked. \"What has seemed to be most important to you?\"");
-    const [suggestions, setSuggestions] = useState([]);
+    // TASK 1: Unified Suggestion State - Single source of truth for all editor suggestions
+    const [activeSuggestions, setActiveSuggestions] = useState([]);
     const [activeConflictGroup, setActiveConflictGroup] = useState(null);
     const editorContainerRef = useRef(null);
     const viewRef = useRef(null);
@@ -122,17 +149,17 @@ function IndexV2() {
         [substantiveGoals, currentGoalIndex]
     );
 
-    // Effect for State Cleanup on Phase Change (PROTECTED - UNCHANGED)
+    // Effect for State Cleanup on Phase Change (UPDATED for Unified Suggestion State)
     useEffect(() => {
         if (currentPhase === 'assessment') {
-            setSuggestions([]);
+            setActiveSuggestions([]);
         }
         // Clear fetch tracking when phase changes
         sentenceLevelFetchedRef.current.clear();
         console.log('🧹 [DEBUG] Cleared sentence-level fetch tracking for phase:', currentPhase);
     }, [currentPhase]);
 
-    // Effect for Data Fetching (PROTECTED - UNCHANGED)
+    // Effect for Data Fetching (TASK 2 FIX: Added position mapping for goal edits)
     useEffect(() => {
         if (SUBSTANTIVE_PHASES.includes(currentPhase)) {
             if (currentGoal && !goalEdits[currentGoal.id]) {
@@ -143,6 +170,7 @@ function IndexV2() {
             }
         }
         
+        // TASK 3: Upgraded Sentence-Level Edit Data Flow
         if (SENTENCE_LEVEL_PHASES.includes(currentPhase)) {
             console.log('🎯 [DEBUG] Sentence-level phase detected:', currentPhase);
             
@@ -185,9 +213,10 @@ function IndexV2() {
                         const groupedSuggestions = ConflictGrouper.groupOverlaps(suggestionsWithPositions);
                         console.log('🎯 [DEBUG] Grouped suggestions:', groupedSuggestions);
                         
-                        console.log('🎯 [DEBUG] About to call setSuggestions');
-                        setSuggestions(groupedSuggestions);
-                        console.log('🎯 [DEBUG] setSuggestions completed successfully');
+                        // UNIFIED SUGGESTION STATE: Update master list instead of calling pmSetSuggestions directly
+                        console.log('🎯 [DEBUG] About to call setActiveSuggestions (sentence-level)');
+                        setActiveSuggestions(groupedSuggestions);
+                        console.log('🎯 [DEBUG] setActiveSuggestions completed successfully (sentence-level)');
                     } else {
                         console.log('🎯 [DEBUG] Editor not available, cannot process suggestions');
                     }
@@ -199,30 +228,91 @@ function IndexV2() {
         }
     }, [currentPhase, currentGoal, nextGoal, manuscriptText, goalEdits, actions]);
 
-    // Effect for Updating ProseMirror with Suggestions (PROTECTED - UNCHANGED)
+    // TASK 2: Upgraded Substantive Edit Data Flow - Now feeds into Unified Suggestion State
     useEffect(() => {
-        console.log('⚡ [DEBUG] ProseMirror update effect triggered, suggestions:', suggestions);
-        if (!viewRef.current) {
-            console.log('⚡ [DEBUG] No viewRef.current, skipping ProseMirror update');
+        if (!viewRef.current || !currentGoal || !goalEdits[currentGoal.id]) {
             return;
         }
-        console.log('⚡ [DEBUG] About to call pmSetSuggestions');
-        try {
-            pmSetSuggestions(viewRef.current, suggestions);
-            console.log('⚡ [DEBUG] pmSetSuggestions completed successfully');
-        } catch (error) {
-            console.error('⚡ [DEBUG] ERROR in pmSetSuggestions:', error);
-        }
-    }, [suggestions]);
 
-    // Action Handlers (PROTECTED - UNCHANGED)
+        const goalEditData = goalEdits[currentGoal.id];
+        if (goalEditData.status === 'loaded' && goalEditData.edits && !goalEditData.positionsMapped) {
+            console.log('🎯 [DEBUG] Adding position mapping to goal edits for:', currentGoal.id);
+            
+            const editsWithPositions = goalEditData.edits.map(edit => {
+                if (!edit.original) return edit;
+                
+                const position = findPositionOfText(viewRef.current.state.doc, edit.original);
+                if (position) {
+                    console.log('🎯 [DEBUG] Found position for goal edit:', edit.original, 'at', position);
+                    
+                    // CANONICAL ID FIX: Generate canonical ID that matches plugin
+                    const canonicalId = generateSuggestionId(
+                        edit.original,
+                        edit.suggestion || edit.replacement || '',
+                        { editType: edit.editType || 'substantive' }
+                    );
+                    console.log('🎯 [DEBUG] Generated canonical ID for edit:', canonicalId);
+                    
+                    return {
+                        ...edit,
+                        id: canonicalId, // ✅ Add canonical ID
+                        from: position.from,
+                        to: position.to
+                    };
+                } else {
+                    console.warn('🎯 [DEBUG] Could not find position for goal edit:', edit.original);
+                    return edit;
+                }
+            });
+
+            // Update the goalEdits in the context with positioned edits
+            actions.updateGoalEditsWithPositions(currentGoal.id, editsWithPositions);
+
+            // UNIFIED SUGGESTION STATE: Add substantive edits to master list
+            const editsWithValidPositions = editsWithPositions.filter(edit => 
+                edit.from !== undefined && edit.to !== undefined
+            );
+            
+            if (editsWithValidPositions.length > 0) {
+                console.log('🎯 [DEBUG] Processing substantive edits for conflict grouping:', editsWithValidPositions);
+                
+                // Group substantive edits for conflicts (same as sentence-level edits)
+                const groupedSubstantiveEdits = ConflictGrouper.groupOverlaps(editsWithValidPositions);
+                console.log('🎯 [DEBUG] Grouped substantive edits:', groupedSubstantiveEdits);
+                
+                // UNIFIED SUGGESTION STATE: Update master list with substantive edits
+                console.log('🎯 [DEBUG] About to call setActiveSuggestions (substantive)');
+                setActiveSuggestions(groupedSubstantiveEdits);
+                console.log('🎯 [DEBUG] setActiveSuggestions completed successfully (substantive)');
+            }
+        }
+    }, [currentGoal, goalEdits, actions]);
+
+    // TASK 4: Single Synchronization Point - Unified Suggestion State with ProseMirror
+    useEffect(() => {
+        console.log('⚡ [UNIFIED] ProseMirror sync effect triggered, activeSuggestions:', activeSuggestions);
+        if (!viewRef.current) {
+            console.log('⚡ [UNIFIED] No viewRef.current, skipping ProseMirror sync');
+            return;
+        }
+        console.log('⚡ [UNIFIED] About to call pmSetSuggestions with unified state');
+        try {
+            pmSetSuggestions(viewRef.current, activeSuggestions);
+            console.log('⚡ [UNIFIED] pmSetSuggestions completed successfully with unified state');
+        } catch (error) {
+            console.error('⚡ [UNIFIED] ERROR in pmSetSuggestions:', error);
+        }
+    }, [activeSuggestions]);
+
+    // Action Handlers (TASK 5: Updated to use Unified Suggestion State)
     const handleGoalComplete = useCallback(() => { actions.advanceToNextGoal(); }, [actions]);
 
     const handleAcceptChoice = useCallback((suggestionId) => {
         if (!viewRef.current) return;
         pmAcceptSuggestion(viewRef.current, suggestionId);
         const newPluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
-        setSuggestions(newPluginState ? newPluginState.suggestions : []);
+        // UNIFIED SUGGESTION STATE: Update master list after acceptance
+        setActiveSuggestions(newPluginState ? newPluginState.suggestions : []);
         setActiveConflictGroup(null);
     }, []);
 
@@ -251,85 +341,36 @@ function IndexV2() {
         </div>
     );
 
-    const renderMentorContent = () => (
-        <div className="p-6">
-            {currentPhase === 'assessment' && (
-                <div>
-                    <h3 className="text-xl font-bold text-green-800 mb-4">📋 Editorial Assessment</h3>
-                    <EditorialPlanner manuscriptText={manuscriptText} />
-                </div>
-            )}
 
-            {SUBSTANTIVE_PHASES.includes(currentPhase) && (
-                <div>
-                    <h3 className="text-xl font-bold text-green-800 mb-4">
-                        🎯 {currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)} Edit 
-                        ({currentGoalIndex !== null ? currentGoalIndex + 1 : 1} of {substantiveGoals.length})
-                    </h3>
-                    {currentGoal ? (
-                        <StrategyCard
-                            key={currentGoal.id}
-                            goal={currentGoal}
-                            edits={(goalEdits[currentGoal.id]?.edits) || []}
-                            isLoading={isFetchingEdits || goalEdits[currentGoal.id]?.status === 'loading'}
-                            onComplete={handleGoalComplete}
-                        />
-                    ) : (
-                        <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200">
-                            <div className="text-4xl mb-4">✅</div>
-                            <p className="text-lg font-semibold text-green-800 mb-3">All substantive goals completed!</p>
-                            <p className="text-sm text-green-600 mb-4">Ready to proceed to the next editing phase.</p>
-                            <button 
-                                onClick={() => actions.completeCurrentPhase()} 
-                                className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-                            >
-                                Proceed to Next Phase
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
-            
-            {SENTENCE_LEVEL_PHASES.includes(currentPhase) && (
-                <div>
-                    <h3 className="text-xl font-bold text-green-800 mb-4">
-                        ✏️ {currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)} Edits
-                    </h3>
-                    {isProcessing ? (
-                        <div className="text-center p-8">
-                            <div className="text-4xl mb-4">⏳</div>
-                            <p className="text-lg font-semibold animate-pulse text-green-700">Analyzing your manuscript...</p>
-                            <p className="text-sm text-green-600 mt-2">Generating personalized suggestions</p>
-                        </div>
-                    ) : activeConflictGroup ? (
-                        <div>
-                            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                                <p className="text-sm text-yellow-800">
-                                    <strong>Conflicting suggestions detected.</strong> Please choose the best option.
-                                </p>
-                            </div>
-                            <SuggestionConflictCard conflictGroup={activeConflictGroup} onAccept={handleAcceptChoice} />
-                        </div>
-                    ) : (
-                        <SpecificEditsPanel 
-                            suggestions={suggestions} 
-                            onAccept={handleAcceptChoice} 
-                            onReject={() => {}} 
-                            onRevise={() => {}} 
-                            getEditMeta={getEditMeta} 
-                        />
-                    )}
-                </div>
-            )}
-        </div>
-    );
 
-    // Main Render - Sophisticated Writer's Desk Layout
+    // Main Render - Sophisticated Writer's Desk Layout with Smart MentorWing
     return (
         <WriterDesk
             museWing={<MuseWing />}
             manuscript={renderManuscript()}
-            mentorWing={<MentorWing>{renderMentorContent()}</MentorWing>}
+            mentorWing={
+                <MentorWing 
+                    manuscriptText={manuscriptText}
+                    actions={actions}
+                    currentPhase={currentPhase}
+                    isProcessing={isProcessing}
+                    // TASK 5: Pass Unified Suggestion State to MentorWing
+                    suggestions={activeSuggestions}
+                    activeConflictGroup={activeConflictGroup}
+                    onAcceptChoice={handleAcceptChoice}
+                    getEditMeta={getEditMeta}
+                    // Additional props for substantive phases
+                    currentGoal={currentGoal}
+                    goalEdits={goalEdits}
+                    isFetchingEdits={isFetchingEdits}
+                    currentGoalIndex={currentGoalIndex}
+                    substantiveGoals={substantiveGoals}
+                    onGoalComplete={handleGoalComplete}
+                    // Additional props for EditorialPlanner
+                    editorialPlan={editorialPlan}
+                    error={error}
+                />
+            }
         />
     );
 }

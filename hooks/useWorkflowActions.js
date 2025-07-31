@@ -1,4 +1,12 @@
 // /hooks/useWorkflowActions.js
+// 
+// CHANGES MADE:
+// - Modified fetchSuggestionsForPhase to accept optional overrideEditTypes parameter
+// - Maintains backward compatibility: if overrideEditTypes provided, uses that array
+// - If not provided, falls back to existing phase-based behavior
+// - Enables Focus Edit consultation to request ['Line', 'Copy'] edit types
+// - TASK 1 FIX: Updated executeApprovedPlan to accept optional filteredGoals parameter
+
 import { useCallback, useRef, useEffect } from 'react';
 import { useWorkflow } from '../context/WorkflowContext';
 
@@ -40,7 +48,8 @@ export function useWorkflowActions() {
   }, [dispatch]);
 
   // This is the stable version that uses the ref and will NOT cause a loop.
-  const fetchSuggestionsForPhase = useCallback(async (manuscriptText) => {
+  // MODIFICATION: Added optional overrideEditTypes parameter for Focus Edit consultation
+  const fetchSuggestionsForPhase = useCallback(async (manuscriptText, overrideEditTypes) => {
     console.log('🔍 [DEBUG] fetchSuggestionsForPhase STARTED');
     
     const phase = workflowStateRef.current.currentPhase;
@@ -55,16 +64,16 @@ export function useWorkflowActions() {
     dispatch({ type: 'SET_IS_PROCESSING', payload: { isProcessing: true } });
     
     try {
-      // Convert phase to proper edit type format
-      const editType = phaseToEditType(phase);
-      console.log('🔍 [DEBUG] Mapped editType:', editType);
+      // Use overrideEditTypes if provided, otherwise fall back to phase-based logic
+      const editTypesForAPI = overrideEditTypes || [phaseToEditType(phase)];
+      console.log('🔍 [DEBUG] Edit types for API:', editTypesForAPI);
       
       console.log('🔍 [DEBUG] About to call fetch API');
       // Use the new sentence-level-edits endpoint for cascade workflow
       const response = await fetch('/api/sentence-level-edits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: manuscriptText, editTypes: [editType] }),
+        body: JSON.stringify({ text: manuscriptText, editTypes: editTypesForAPI }),
       });
       
       console.log('🔍 [DEBUG] Fetch response received, ok:', response.ok);
@@ -124,7 +133,15 @@ export function useWorkflowActions() {
     }
   }, [dispatch]);
 
-  const executeApprovedPlan = useCallback((workflowType) => { dispatch({ type: 'EXECUTE_APPROVED_PLAN', payload: { workflowType } }); }, [dispatch]);
+  const executeApprovedPlan = useCallback((workflowType, filteredGoals) => { 
+    dispatch({ type: 'EXECUTE_APPROVED_PLAN', payload: { workflowType, filteredGoals } }); 
+  }, [dispatch]);
+  
+  // TASK 2 FIX: Action to update goal edits with position mapping
+  const updateGoalEditsWithPositions = useCallback((goalId, positionedEdits) => {
+    dispatch({ type: 'UPDATE_GOAL_EDITS_WITH_POSITIONS', payload: { goalId, positionedEdits } });
+  }, [dispatch]);
+  
   const advanceToNextGoal = useCallback(() => { dispatch({ type: 'ADVANCE_GOAL' }); }, [dispatch]);
   const completeCurrentPhase = useCallback(() => { dispatch({ type: 'COMPLETE_AND_ADVANCE_PHASE' }); }, [dispatch]);
   const resetWorkflow = useCallback(() => { dispatch({ type: 'RESET_WORKFLOW' }); }, [dispatch]);
@@ -138,5 +155,6 @@ export function useWorkflowActions() {
     fetchEditsForGoal,
     prefetchEditsForGoal,
     advanceToNextGoal,
+    updateGoalEditsWithPositions,
   };
 }

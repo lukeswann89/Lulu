@@ -2,6 +2,7 @@ import React from 'react';
 import EditModeContainer from './EditModeContainer';
 import AccordionSection from './AccordionSection';
 import SuggestionCard from './SuggestionCard';
+import SpecificEditCard from './SpecificEditCard';
 
 export default function SpecificEditsPanel({
   suggestions = [],
@@ -28,6 +29,8 @@ export default function SpecificEditsPanel({
   // Specific Edits controls
   onUndoHistory,
   onRedoHistory,
+  // TASK 3 FIX: Simple mode for canonical component usage
+  simpleMode = false,
 }) {
   
   console.log("SpecificEditsPanel props.suggestions:", suggestions);
@@ -154,6 +157,36 @@ export default function SpecificEditsPanel({
     </div>
   );
 
+  // TASK 3 FIX: Simple mode using canonical SpecificEditCard
+  if (simpleMode) {
+    if (!suggestions.length) {
+      return (
+        <div className="text-center py-8">
+          <div className="text-4xl mb-4">📝</div>
+          <p className="text-lg font-medium text-gray-600">No suggestions found</p>
+          <p className="text-sm text-gray-500 mt-1">Your text looks good as is!</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {suggestions.map((suggestion, index) => (
+          <SpecificEditCard
+            key={suggestion.id || index}
+            edit={suggestion}
+            index={index}
+            onAccept={onAccept}
+            onReject={onReject}
+            onRevise={onRevise}
+            getEditMeta={getEditMeta}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // Original complex mode for backward compatibility
   if (!suggestions.length) {
     return (
       <div className="mt-6 bg-white p-4 rounded shadow">

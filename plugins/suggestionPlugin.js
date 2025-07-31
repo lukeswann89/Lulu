@@ -218,7 +218,7 @@ class EnhancedSuggestionState {
           
           const finalDecorations = finalSuggestions.map(sug => {
             return Decoration.inline(sug.from, sug.to, {
-              class: `suggestion-highlight ${sug.editType.toLowerCase()}`,
+              class: `suggestion-highlight ${(sug.editType || 'substantive').toLowerCase()}`,
               'data-suggestion-id': sug.id,
               title: `Click to replace with "${sug.replacement}"`
             });
@@ -262,11 +262,11 @@ class EnhancedSuggestionState {
         editType: suggestionData.editType || 'Line',
       };
       
-      const decoration = Decoration.inline(from, to, {
-        class: `suggestion-highlight ${suggestion.editType.toLowerCase()}`,
-        'data-suggestion-id': suggestion.id,
-        title: `Click to replace with "${suggestion.replacement}"`
-      });
+            const decoration = Decoration.inline(from, to, {
+        class: `suggestion-highlight ${(suggestion.editType || 'substantive').toLowerCase()}`,
+        'data-suggestion-id': suggestion.id,
+        title: `Click to replace with "${suggestion.replacement}"`
+      });
       
       decorations.push(decoration);
       suggestions.push(suggestion);
@@ -293,11 +293,11 @@ class EnhancedSuggestionState {
       editType: action.editType || 'Line'
     };
     
-    const decoration = Decoration.inline(suggestion.from, suggestion.to, {
-      class: `suggestion-highlight ${suggestion.editType.toLowerCase()}`,
-      'data-suggestion-id': suggestion.id,
-      title: `${suggestion.editType}: Click to replace with "${suggestion.replacement}"`
-    });
+        const decoration = Decoration.inline(suggestion.from, suggestion.to, {
+      class: `suggestion-highlight ${(suggestion.editType || 'substantive').toLowerCase()}`,
+      'data-suggestion-id': suggestion.id,
+      title: `${suggestion.editType || 'Substantive'}: Click to replace with "${suggestion.replacement}"`
+    });
     
     return { suggestion, decoration };
   }

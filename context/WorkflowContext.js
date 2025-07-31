@@ -33,15 +33,21 @@ export function workflowReducer(state, action) {
     }
     case 'EXECUTE_APPROVED_PLAN': {
         const workflowType = action.payload.workflowType || state.currentWorkflow;
+        const filteredGoals = action.payload.filteredGoals;
         const newWorkflow = WORKFLOWS[workflowType];
         if (!newWorkflow) return state;
         const isSubstantiveWorkflow = newWorkflow.phases.includes('developmental') || newWorkflow.phases.includes('structural');
+        
+        // TASK 1 FIX: If filteredGoals provided, save only selected goals to editorialPlan
+        const updatedEditorialPlan = filteredGoals ? filteredGoals : state.editorialPlan;
+        
         return {
             ...state,
             currentWorkflow: workflowType,
             workflowPhases: newWorkflow.phases,
             currentPhase: newWorkflow.phases[1] || 'complete',
             currentGoalIndex: isSubstantiveWorkflow ? 0 : null,
+            editorialPlan: updatedEditorialPlan,
         };
     }
     case 'FETCH_GOAL_EDITS_START':
@@ -94,6 +100,20 @@ export function workflowReducer(state, action) {
     }
     case 'SET_IS_PROCESSING': {
       return { ...state, isProcessing: action.payload.isProcessing };
+    }
+    case 'UPDATE_GOAL_EDITS_WITH_POSITIONS': {
+      const { goalId, positionedEdits } = action.payload;
+      return {
+        ...state,
+        goalEdits: {
+          ...state.goalEdits,
+          [goalId]: {
+            ...state.goalEdits[goalId],
+            edits: positionedEdits,
+            positionsMapped: true,
+          }
+        }
+      };
     }
     case 'RESET_WORKFLOW': {
       return { ...initialState };

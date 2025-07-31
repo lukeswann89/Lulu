@@ -2,7 +2,22 @@
 // High-level suggestion management utilities
 
 import { findTextInDoc } from './prosemirrorHelpers.js';
-import { addSuggestion, clearAllSuggestions, getSuggestions } from '../plugins/suggestionPlugin.js';
+import { setSuggestions, clearAllSuggestions, getSuggestions } from '../plugins/coreSuggestionPlugin.js';
+
+// Wrapper function to convert addSuggestion to setSuggestions format
+function addSuggestion(view, from, to, original, replacement, editType = 'Line', id = null) {
+  const currentSuggestions = getSuggestions(view.state) || [];
+  const newSuggestion = {
+    id: id || `suggestion_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+    from,
+    to,
+    original,
+    suggestion: replacement,
+    replacement,
+    editType
+  };
+  setSuggestions(view, [...currentSuggestions, newSuggestion]);
+}
 
 // Suggestion manager class
 export class SuggestionManager {

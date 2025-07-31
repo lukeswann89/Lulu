@@ -35,7 +35,7 @@ export class DecorationBuilder {
     const textColor = getTextColor(backgroundColor)
     
     const decoration = Decoration.inline(from, to, {
-      class: `lulu-suggestion lulu-suggestion-${suggestion.id} lulu-edit-${suggestion.editType.toLowerCase()}`,
+      class: `lulu-suggestion lulu-suggestion-${suggestion.id} lulu-edit-${(suggestion.editType || 'substantive').toLowerCase()}`,
       'data-suggestion-id': suggestion.id,
       'data-edit-type': suggestion.editType,
       'data-original': suggestion.original,

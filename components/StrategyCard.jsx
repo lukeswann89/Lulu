@@ -2,19 +2,32 @@
 
 import React, { useState, useEffect } from 'react';
 import { CheckCircleIcon, ArrowRightIcon } from '@heroicons/react/24/solid';
+import SpecificEditCard from './SpecificEditCard';
 
 /**
  * A self-contained, interactive card for resolving a single high-level edit.
  * It displays the main goal and then renders the specific, actionable edits for the user
  * to accept or reject one by one. This is "The Dynamic Workbench".
+ * 
+ * TASK 3 FIX: Updated to use canonical SpecificEditCard component for consistency
+ * 
  * @param {{
  * goal: { id: string, text: string, why: string },
  * edits: Array<{ original: string, suggestion: string, why: string, severity: string }>,
  * isLoading: boolean,
- * onComplete: () => void
+ * onComplete: () => void,
+ * onAcceptChoice: (suggestionId, suggestion) => void,
+ * getEditMeta: (type) => object
  * }} props
  */
-export default function StrategyCard({ goal, edits = [], isLoading, onComplete }) {
+export default function StrategyCard({ 
+    goal, 
+    edits = [], 
+    isLoading, 
+    onComplete, 
+    onAcceptChoice,
+    getEditMeta 
+}) {
   // --- Internal State ---
   // Tracks the indices of edits that have been resolved (accepted or rejected).
   const [resolvedEdits, setResolvedEdits] = useState(new Set());
@@ -58,7 +71,15 @@ export default function StrategyCard({ goal, edits = [], isLoading, onComplete }
               key={index}
               edit={edit}
               index={index}
-              onResolve={handleEditResolved}
+              onAccept={(suggestionId, suggestion) => {
+                if (onAcceptChoice) {
+                  onAcceptChoice(suggestionId, suggestion);
+                }
+                handleEditResolved(index);
+              }}
+              onReject={() => handleEditResolved(index)}
+              onRevise={() => handleEditResolved(index)}
+              getEditMeta={getEditMeta}
               isResolved={resolvedEdits.has(index)}
             />
           ))
@@ -86,35 +107,7 @@ export default function StrategyCard({ goal, edits = [], isLoading, onComplete }
   );
 }
 
-/**
- * A single, interactive card for one specific edit (Line, Copy, etc.).
- * It presents the change clearly and allows the user to accept or reject.
- */
-function SpecificEditCard({ edit, index, onResolve, isResolved }) {
-  if (isResolved) {
-    return (
-      <div className="flex items-center gap-3 p-3 bg-green-50 text-green-800 border border-green-200 rounded-md transition-all">
-        <CheckCircleIcon className="h-6 w-6 flex-shrink-0" />
-        <span className="text-sm font-medium">Suggestion resolved.</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 transition-all hover:shadow-sm animate-fade-in-up">
-      <p className="text-xs font-semibold text-purple-700">{edit.severity === 'Critical' ? 'Critical Edit' : 'Suggested Edit'}</p>
-      <div className="my-2 text-sm space-y-1">
-        <p><span className="font-bold text-red-600 line-through decoration-2">{edit.original}</span></p> 
-        <p><span className="font-bold text-green-600">{edit.suggestion}</span></p>
-      </div>
-      <p className="text-xs text-gray-600 italic">"{edit.why}"</p>
-      <div className="flex gap-2 mt-3">
-        <button onClick={() => onResolve(index)} className="text-xs font-semibold bg-green-100 text-green-800 px-3 py-1 rounded-full hover:bg-green-200">Accept</button>
-        <button onClick={() => onResolve(index)} className="text-xs font-semibold bg-red-100 text-red-800 px-3 py-1 rounded-full hover:bg-red-200">Reject</button>
-      </div>
-    </div>
-  );
-}
+// TASK 3 FIX: Removed local SpecificEditCard - now uses canonical component
 
 /**
  * A loading skeleton to display while fetching edits.

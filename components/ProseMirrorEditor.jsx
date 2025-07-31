@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 import { EditorView } from "prosemirror-view";
 import { EditorState } from "prosemirror-state";
 import { luluSchema } from "../schemas/luluSchema";
-import { createSuggestionPlugin, setSuggestions, acceptSuggestion as pmAcceptSuggestion } from "../plugins/suggestionPlugin";
+import { createCoreSuggestionPlugin as createSuggestionPlugin, setSuggestions, acceptSuggestion as pmAcceptSuggestion } from "../plugins/coreSuggestionPlugin";
 import { createDocFromText, docToText } from "../utils/prosemirrorHelpers";
 import { SuggestionManager } from "../utils/suggestionManager";
 import { Plugin } from "prosemirror-state";

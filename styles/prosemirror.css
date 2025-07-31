@@ -85,6 +85,30 @@
   border-bottom-color: #4b5563 !important;
 }
 
+/* Substantive Edits - Gold/Orange */
+.suggestion-highlight.substantive {
+  background-color: rgba(251, 146, 60, 0.2) !important;
+  border-bottom: 2px solid #f97316 !important;
+}
+
+.suggestion-highlight.substantive:hover {
+  background-color: rgba(251, 146, 60, 0.3) !important;
+  border-bottom-color: #ea580c !important;
+}
+
+/* Conflict Groups - Distinctive Pink */
+.suggestion-highlight.conflict-highlight {
+  background-color: rgba(236, 72, 153, 0.25) !important;
+  border: 2px dashed #ec4899 !important;
+  border-radius: 4px !important;
+}
+
+.suggestion-highlight.conflict-highlight:hover {
+  background-color: rgba(236, 72, 153, 0.35) !important;
+  border-color: #db2777 !important;
+  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.3) !important;
+}
+
 /* General hover effect for all suggestions */
 .suggestion-highlight:hover {
   opacity: 0.9 !important;

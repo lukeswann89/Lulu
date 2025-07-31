@@ -244,7 +244,7 @@ class CoreSuggestionState {
                 });
             } else {
                 return Decoration.inline(s.from, s.to, {
-                    class: `suggestion-highlight ${s.editType.toLowerCase()}`,
+                    class: `suggestion-highlight ${(s.editType || 'substantive').toLowerCase()}`,
                     'data-suggestion-id': s.id,
                     title: `${s.editType}: Click to replace with "${s.replacement}"`
                 });
