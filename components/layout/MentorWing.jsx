@@ -157,7 +157,7 @@ const MentorWing = ({
                         <StrategyCard
                             key={currentGoal.id}
                             goal={currentGoal}
-                            edits={(goalEdits[currentGoal.id]?.edits) || []}
+                            edits={suggestions || []}
                             isLoading={isFetchingEdits || goalEdits[currentGoal.id]?.status === 'loading'}
                             onComplete={onGoalComplete}
                             onAcceptChoice={onAcceptChoice}

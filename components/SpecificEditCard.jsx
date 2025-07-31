@@ -45,7 +45,6 @@ export default function SpecificEditCard({
             console.error('[REACT] CRITICAL: Edit object missing canonical ID!', edit);
             return;
         }
-        console.log(`[REACT] SpecificEditCard.handleAccept: Sending canonical ID="${edit.id}"`);
         if (onAccept) {
             onAccept(edit.id, edit);
         }

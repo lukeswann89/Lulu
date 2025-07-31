@@ -9,6 +9,12 @@
 // - Ensures substantive edits are properly highlighted and clickable in the editor
 // - Maintains all existing architectural patterns (Three Pillars, useRef, useMemo)
 //
+// STRATEGIC FIX - "SOUS-CHEF" PRE-FETCHING DISABLED:
+// - Temporarily disabled pre-fetching of next goal edits to prevent Position Invalidation bug
+// - Accepting edits on current StrategyCard can change document, making pre-fetched data incorrect
+// - Priority: Stability over performance - data now fetched just-in-time for each card
+// - This ensures data integrity and prevents errors from stale position data
+//
 // PREVIOUS CHANGES:
 // - Simplified right-panel logic by removing complex JSX conditionals
 // - Replaced complex renderMentorContent() with smart MentorWing component
@@ -165,9 +171,9 @@ function IndexV2() {
             if (currentGoal && !goalEdits[currentGoal.id]) {
                 actions.fetchEditsForGoal(currentGoal, manuscriptText);
             }
-            if (nextGoal && !goalEdits[nextGoal.id]) {
-                actions.prefetchEditsForGoal(nextGoal, manuscriptText);
-            }
+            // SOUS-CHEF PRE-FETCHING DISABLED: Removed nextGoal pre-fetching to prevent Position Invalidation bug
+            // When edits are accepted on current goal, document positions change, making pre-fetched data incorrect
+            // Data will now be fetched just-in-time when each goal becomes current
         }
         
         // TASK 3: Upgraded Sentence-Level Edit Data Flow
@@ -226,7 +232,7 @@ function IndexV2() {
             };
             fetchSentenceLevelEdits();
         }
-    }, [currentPhase, currentGoal, nextGoal, manuscriptText, goalEdits, actions]);
+    }, [currentPhase, currentGoal, manuscriptText, goalEdits, actions]);
 
     // TASK 2: Upgraded Substantive Edit Data Flow - Now feeds into Unified Suggestion State
     useEffect(() => {
@@ -309,10 +315,31 @@ function IndexV2() {
 
     const handleAcceptChoice = useCallback((suggestionId) => {
         if (!viewRef.current) return;
+        
+        // GUARD: Check if suggestion still exists in plugin state (prevents double-processing)
+        const currentPluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
+        if (!currentPluginState) return;
+        
+        // Check if suggestion exists (handles both direct suggestions and conflict groups)
+        const suggestionExists = currentPluginState.suggestions.some(s => {
+            if (s.isConflictGroup) {
+                return s.suggestions.some(child => child.id === suggestionId);
+            }
+            return s.id === suggestionId;
+        });
+        
+        if (!suggestionExists) {
+            // Suggestion already processed - ignore duplicate request
+            return;
+        }
+        
+        // Process the suggestion
         pmAcceptSuggestion(viewRef.current, suggestionId);
-        const newPluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
+        
         // UNIFIED SUGGESTION STATE: Update master list after acceptance
-        setActiveSuggestions(newPluginState ? newPluginState.suggestions : []);
+        const newPluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
+        const newSuggestions = newPluginState ? newPluginState.suggestions : [];
+        setActiveSuggestions(newSuggestions);
         setActiveConflictGroup(null);
     }, []);
 
