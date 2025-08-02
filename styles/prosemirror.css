@@ -2,6 +2,16 @@
 /* Complete ProseMirror styling with working highlight colors */
 
 /* Basic ProseMirror Editor Styles */
+.ProseMirror {
+  outline: none;
+  min-height: 300px;
+  padding: 12px;
+  font-family: ui-serif, Georgia, Cambria, serif;
+  font-size: 16px;
+  line-height: 1.6;
+  white-space: pre-wrap; /* Required by ProseMirror for proper text rendering */
+}
+
 .prosemirror-editor .ProseMirror {
   outline: none;
   min-height: 300px;
@@ -94,6 +104,14 @@
 .suggestion-highlight.substantive:hover {
   background-color: rgba(251, 146, 60, 0.3) !important;
   border-bottom-color: #ea580c !important;
+}
+
+/* Passive "Red Line" Grammar Suggestions - Clean straight line */
+.ProseMirror .suggestion-highlight.passive {
+  border-bottom: 2px solid rgba(239, 68, 68, 0.7) !important; /* A solid, translucent red */
+  text-decoration: none !important; /* Override any default underline */
+  background: none !important; /* Ensure no highlight background */
+  cursor: pointer;
 }
 
 /* Conflict Groups - Distinctive Pink */

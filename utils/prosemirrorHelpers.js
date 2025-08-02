@@ -48,8 +48,8 @@ export function findPositionOfText(doc, searchText) {
             const index = node.text.indexOf(searchText);
             
             if (index !== -1) {
-                // This is the corrected logic from our successful test.
-                // 'pos' is the position at the start of the text node.
+                // CORRECTED FIX: pos already points to the text node's start position
+                // The +1 was causing the systematic right-shift - removed per forensic analysis
                 const from = pos + index; 
                 const to = from + searchText.length;
                 result = { from, to };
@@ -179,4 +179,84 @@ export function logSuggestions(suggestions, label = 'Suggestions') {
     console.log(`${i + 1}. [${s.editType}] ${s.from}-${s.to}: "${s.original}" → "${s.suggestion}"`);
   });
   console.groupEnd();
+}
+
+/**
+ * Maps LanguageTool grammar matches to ProseMirror suggestion objects
+ * Uses proven position mapping logic that correctly handles text-only offsets
+ */
+export function mapGrammarMatchesToSuggestions(matches, doc) {
+    if (!matches || !doc) return [];
+
+    /**
+     * Maps a character position from plain text to ProseMirror document position
+     * PROVEN LOGIC: Only counts text content, ignores ProseMirror structure
+     */
+    const mapCharacterToDoc = (charPos) => {
+        if (charPos < 0) return null;
+        
+        let currentOffset = 0;
+        let resultPos = null;
+        
+        doc.descendants((node, pos) => {
+            if (resultPos !== null) return false;
+            
+            if (node.isText) {
+                const nodeText = node.text;
+                const nodeEnd = currentOffset + nodeText.length; // ✅ CORRECT: text.length only
+                
+                // Check if our target character position falls within this text node
+                if (charPos >= currentOffset && charPos < nodeEnd) {
+                    const offsetInNode = charPos - currentOffset;
+                    resultPos = pos + offsetInNode; // CORRECTED: pos is already at text node start
+                    return false; // Stop searching
+                }
+                
+                currentOffset = nodeEnd;
+            }
+            // ✅ CORRECT: No block node handling - prevents off-by-one errors
+        });
+        
+        return resultPos;
+    };
+
+    // Transform matches to suggestions with debug logging
+    const suggestions = matches.map((match, index) => {
+        console.log('🔬 [CORRECTED POSITIONING] Match:', {
+            offset: match.offset,
+            length: match.length,
+            text: doc.textContent.substring(match.offset, match.offset + match.length),
+            context: doc.textContent.substring(Math.max(0, match.offset - 5), match.offset + match.length + 5)
+        });
+        
+        const fromPos = mapCharacterToDoc(match.offset);
+        const toPos = mapCharacterToDoc(match.offset + match.length);
+        
+        console.log('🔬 [CORRECTED POSITIONING] Mapped positions (NO +1 offset):', {
+            from: fromPos,
+            to: toPos,
+            actualText: fromPos && toPos ? doc.textBetween(fromPos, toPos) : 'N/A',
+            shouldMatch: doc.textContent.substring(match.offset, match.offset + match.length)
+        });
+        
+        if (!fromPos || !toPos || fromPos >= toPos) {
+            console.warn('🔴 [RED LINE] Invalid position mapping for match:', match);
+            return null;
+        }
+        
+        return {
+            id: `grammar_${match.offset}_${match.length}_${index}`,
+            type: 'passive', // Triggers Red Line styling
+            from: fromPos,
+            to: toPos,
+            original: doc.textBetween(fromPos, toPos),
+            replacement: match.replacements?.[0]?.value || 'Grammar suggestion',
+            suggestion: match.replacements?.[0]?.value || 'Grammar suggestion',
+            message: match.message,
+            rule: match.rule?.id,
+            editType: 'grammar'
+        };
+    }).filter(Boolean);
+
+    return suggestions;
 }

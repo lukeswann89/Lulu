@@ -34,7 +34,13 @@ import {
     acceptSuggestion as pmAcceptSuggestion,
     setSuggestions as pmSetSuggestions
 } from "../plugins/coreSuggestionPlugin";
-import { createDocFromText, docToText, findPositionOfText } from "../utils/prosemirrorHelpers";
+
+// DIAGNOSTIC: Verify imports are working correctly
+console.log('📦 [IMPORT] pmSetSuggestions function type:', typeof pmSetSuggestions);
+console.log('📦 [IMPORT] pmSetSuggestions function preview:', pmSetSuggestions.toString().substring(0, 200));
+console.log('📦 [IMPORT] coreSuggestionPluginKey:', coreSuggestionPluginKey);
+console.log('📦 [IMPORT] Plugin key type:', typeof coreSuggestionPluginKey);
+import { createDocFromText, docToText, findPositionOfText, mapGrammarMatchesToSuggestions } from "../utils/prosemirrorHelpers";
 import { ConflictGrouper } from '../utils/conflictGrouper';
 import { generateSuggestionId } from '../utils/suggestionIdGenerator';
 // UI & Helper Imports
@@ -90,13 +96,56 @@ function IndexV2() {
         error
     } = workflowState;
 
-    const [manuscriptText, setManuscriptText] = useState("Lachesis ran her hand through her hair and focused her pacing gaze on Sylvia's hands. \"And what have you done since you came to this world?\" the Director asked. \"What has seemed to be most important to you?\"");
+    const [manuscriptText, setManuscriptText] = useState("Lachesis ran her hand through her hair and focused her pacing gaze on Sylvia's hands. \"And what have you done since you came to this world?\" the Director asked. \"What has seemed to be most important to you?\" She had went to the store yesterday.");
     // TASK 1: Unified Suggestion State - Single source of truth for all editor suggestions
     const [activeSuggestions, setActiveSuggestions] = useState([]);
     const [activeConflictGroup, setActiveConflictGroup] = useState(null);
+    // Red Line Grammar Check State
+    const [isGrammarChecking, setIsGrammarChecking] = useState(false);
+    const lastGrammarCheckTextRef = useRef(''); // Track last text that was grammar checked
     const editorContainerRef = useRef(null);
     const viewRef = useRef(null);
     const sentenceLevelFetchedRef = useRef(new Set()); // Track which phases we've fetched
+
+    // DIAGNOSTIC FUNCTIONS
+    const testDirectPluginCall = () => {
+        if (!viewRef.current) {
+            console.log('🧪 [TEST] ViewRef not available, skipping direct test');
+            return;
+        }
+        
+        const testSuggestion = [{
+            id: 'test_direct_123',
+            type: 'passive',
+            from: 1,
+            to: 5,
+            original: 'test',
+            replacement: 'TEST',
+            editType: 'grammar',
+            suggestion: 'TEST'
+        }];
+        
+        console.log('🧪 [TEST] Calling setSuggestions directly with test data');
+        console.log('🧪 [TEST] Test suggestion:', testSuggestion[0]);
+        pmSetSuggestions(viewRef.current, testSuggestion);
+    };
+
+    const checkPluginState = () => {
+        if (!viewRef.current) {
+            console.log('🔍 [STATE CHECK] ViewRef not available');
+            return;
+        }
+        
+        try {
+            const pluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
+            console.log('🔍 [STATE CHECK] Plugin state exists:', !!pluginState);
+            console.log('🔍 [STATE CHECK] Plugin state:', pluginState);
+            console.log('🔍 [STATE CHECK] Suggestions in plugin:', pluginState?.suggestions?.length || 0);
+            console.log('🔍 [STATE CHECK] Decorations in plugin:', pluginState?.decorations?.find || 'no decorations');
+        } catch (error) {
+            console.error('🔍 [STATE CHECK] Error accessing plugin state:', error);
+        }
+    };
 
     // ProseMirror Initialization (PROTECTED - UNCHANGED)
     useEffect(() => {
@@ -128,6 +177,12 @@ function IndexV2() {
 
         viewRef.current = view;
         console.log('📝 [DEBUG] ProseMirror editor created successfully');
+        
+        // DIAGNOSTIC: Test direct plugin communication after initialization
+        setTimeout(() => {
+            testDirectPluginCall();
+            checkPluginState();
+        }, 1000);
         
         return () => { 
             console.log('📝 [DEBUG] Cleaning up ProseMirror editor');
@@ -305,10 +360,112 @@ function IndexV2() {
         try {
             pmSetSuggestions(viewRef.current, activeSuggestions);
             console.log('⚡ [UNIFIED] pmSetSuggestions completed successfully with unified state');
+            
+            // DIAGNOSTIC: Check plugin state after each pmSetSuggestions call
+            setTimeout(() => {
+                console.log('🔍 [UNIFIED CHECK] Checking plugin state after pmSetSuggestions...');
+                checkPluginState();
+            }, 100);
         } catch (error) {
             console.error('⚡ [UNIFIED] ERROR in pmSetSuggestions:', error);
         }
     }, [activeSuggestions]);
+
+    // Red Line Grammar Check Integration - Passive Awareness System
+    useEffect(() => {
+        const checkGrammar = async () => {
+            if (!manuscriptText.trim() || isGrammarChecking) return;
+            
+            setIsGrammarChecking(true);
+            try {
+                console.log('🔴 [RED LINE] Starting grammar check for text:', manuscriptText.substring(0, 50) + '...');
+                console.log('🔴 [RED LINE] Current activeSuggestions length:', activeSuggestions.length);
+                
+                const response = await fetch('/api/grammar-check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: manuscriptText })
+                });
+                
+                if (!response.ok) throw new Error(`Grammar check failed: ${response.status}`);
+                
+                const { results } = await response.json();
+                console.log('🔴 [RED LINE] Grammar check results:', results);
+                
+                // ✅ CLEAN REFACTORED CALL: Use proven utility function
+                if (!viewRef.current) {
+                    console.warn('🔴 [RED LINE] No editor view available');
+                    return;
+                }
+
+                const grammarSuggestions = mapGrammarMatchesToSuggestions(results, viewRef.current.state.doc);
+                
+                console.log('🔴 [RED LINE] Transformed suggestions:', grammarSuggestions);
+                console.log('🔴 [RED LINE] First suggestion details:', grammarSuggestions[0]);
+                
+                // Smart suggestion diffing - only update what actually changed
+                setActiveSuggestions(prevSuggestions => {
+                    const nonGrammarSuggestions = prevSuggestions.filter(s => s.type !== 'passive');
+                    const existingPassiveSuggestions = prevSuggestions.filter(s => s.type === 'passive');
+                    
+                    // Compare new suggestions with existing ones
+                    const suggestionsToKeep = existingPassiveSuggestions.filter(existing => {
+                        // Keep existing suggestion if it still matches the new results
+                        return grammarSuggestions.some(newSug => 
+                            newSug.from === existing.from && 
+                            newSug.to === existing.to &&
+                            newSug.original === existing.original
+                        );
+                    });
+                    
+                    const suggestionsToAdd = grammarSuggestions.filter(newSug => {
+                        // Add new suggestion if it doesn't already exist
+                        return !existingPassiveSuggestions.some(existing =>
+                            existing.from === newSug.from && 
+                            existing.to === newSug.to &&
+                            existing.original === newSug.original
+                        );
+                    });
+                    
+                    const finalSuggestions = [...nonGrammarSuggestions, ...suggestionsToKeep, ...suggestionsToAdd];
+                    
+                    console.log('🔴 [RED LINE] Smart diff results:');
+                    console.log('🔴 [RED LINE] - Existing passive suggestions:', existingPassiveSuggestions.length);
+                    console.log('🔴 [RED LINE] - Suggestions to keep:', suggestionsToKeep.length);
+                    console.log('🔴 [RED LINE] - New suggestions to add:', suggestionsToAdd.length);
+                    console.log('🔴 [RED LINE] - Final suggestion count:', finalSuggestions.length);
+                    
+                    return finalSuggestions;
+                });
+                
+                // Update the last grammar check text
+                lastGrammarCheckTextRef.current = manuscriptText;
+                
+            } catch (error) {
+                console.error('🔴 [RED LINE] Grammar check error:', error);
+            } finally {
+                setIsGrammarChecking(false);
+            }
+        };
+
+        // Smart suggestion management - only check if significant text change
+        const textChanged = lastGrammarCheckTextRef.current !== manuscriptText;
+        const hasPassiveSuggestions = activeSuggestions.some(s => s.type === 'passive');
+        
+        // Skip if text unchanged and we have recent suggestions
+        if (hasPassiveSuggestions && !textChanged) {
+            console.log('🔴 [RED LINE] Skipping grammar check - text unchanged and passive suggestions exist');
+            return;
+        }
+        
+        // For text changes, we'll do smart diffing after getting new results
+        // No aggressive clearing here - let the results determine what to update
+        console.log('🔴 [RED LINE] Text changed, will update suggestions intelligently');
+
+        // Debounce grammar checking - wait 2 seconds after text changes
+        const timeoutId = setTimeout(checkGrammar, 2000);
+        return () => clearTimeout(timeoutId);
+    }, [manuscriptText, isGrammarChecking]); // Remove activeSuggestions.length dependency
 
     // Action Handlers (TASK 5: Updated to use Unified Suggestion State)
     const handleGoalComplete = useCallback(() => { actions.advanceToNextGoal(); }, [actions]);
@@ -358,6 +515,7 @@ function IndexV2() {
                 <div 
                     ref={editorContainerRef} 
                     className="border border-gray-300 rounded-lg p-4 bg-white focus-within:border-purple-500 transition-colors"
+                    spellCheck="false"
                     style={{ 
                         minHeight: '500px',
                         height: 'calc(100vh - 200px)',

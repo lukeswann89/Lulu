@@ -218,22 +218,30 @@ class CoreSuggestionState {
     }
 
     handleSetSuggestions(action, doc) {
-        // --- REFACTORED: This function is now much simpler ---
-        // It no longer needs to map positions; it receives them directly.
+        console.log('🔧 [HANDLE_SET] Received action:', action);
+        console.log('🔧 [HANDLE_SET] Suggestions:', action.suggestions);
+        console.log('🔧 [HANDLE_SET] Number of suggestions:', action.suggestions?.length || 0);
+        
+        // CANONICAL ID SYSTEM: Preserve exact suggestion objects from React with their canonical IDs
         const validSuggestions = action.suggestions.filter(s => s.from && s.to);
+        console.log('🔧 [HANDLE_SET] Valid suggestions after filtering:', validSuggestions.length);
 
         const suggestionsWithOriginals = validSuggestions.map(s => {
-            // We still need to get the original text for the record.
+            // Extract original text from document for display purposes
             const originalText = doc.textBetween(s.from, s.to);
+            
+            // CRITICAL CHANGE: Use canonical ID from React - DO NOT generate fallback IDs
+            // The suggestion object must be preserved exactly as received from React
             return {
-                ...s,
-                id: s.id || generateSuggestionId(originalText, s.suggestion),
-                original: originalText,
-                replacement: s.suggestion,
+                ...s, // Preserve all properties from React, including canonical ID
+                original: originalText, // Add extracted original text
+                replacement: s.suggestion || s.replacement, // Normalize replacement text
             };
         });
 
         const groupedSuggestions = ConflictGrouper.groupOverlaps(suggestionsWithOriginals);
+        console.log('🔧 [HANDLE_SET] Grouped suggestions:', groupedSuggestions);
+        console.log('🔧 [HANDLE_SET] About to create decorations for', groupedSuggestions.length, 'suggestions');
 
         const newDecorations = groupedSuggestions.map(s => {
             if (s.isConflictGroup) {
@@ -243,10 +251,27 @@ class CoreSuggestionState {
                     title: 'Multiple suggestions available. Click to see options.'
                 });
             } else {
+                // --- ARCHITECT'S NOTE: This logic now handles both Active and Passive suggestion types ---
+                let suggestionClass = '';
+                console.log('🛠️ [PLUGIN] Processing suggestion:', s.id, 'type:', s.type, 'editType:', s.editType);
+                
+                if (s.type === 'passive') {
+                    suggestionClass = 'passive'; // Use our new 'Red Line' style
+                    console.log('🛠️ [PLUGIN] Applied PASSIVE class to suggestion:', s.id);
+                } else {
+                    // Fallback for our existing Active suggestions
+                    suggestionClass = (s.editType || 'substantive').toLowerCase();
+                    console.log('🛠️ [PLUGIN] Applied class:', suggestionClass, 'to suggestion:', s.id);
+                }
+                
+                const displayType = s.editType || 'Substantive';
+                const finalClass = `suggestion-highlight ${suggestionClass}`;
+                console.log('🛠️ [PLUGIN] Final CSS class:', finalClass);
+                
                 return Decoration.inline(s.from, s.to, {
-                    class: `suggestion-highlight ${(s.editType || 'substantive').toLowerCase()}`,
+                    class: finalClass,
                     'data-suggestion-id': s.id,
-                    title: `${s.editType}: Click to replace with "${s.replacement}"`
+                    title: `${displayType}: Click to replace with "${s.replacement || s.suggestion}"`
                 });
             }
         });
@@ -311,6 +336,13 @@ export function createCoreSuggestionPlugin({ onAccept, onConflictClick }) {
                 return new CoreSuggestionState();
             },
             apply(tr, state) {
+                console.log('🔧 [PLUGIN APPLY] Transaction received');
+                console.log('🔧 [PLUGIN APPLY] Has meta data:', !!tr.getMeta(coreSuggestionPluginKey));
+                const meta = tr.getMeta(coreSuggestionPluginKey);
+                if (meta) {
+                    console.log('🔧 [PLUGIN APPLY] Meta type:', meta.type);
+                    console.log('🔧 [PLUGIN APPLY] Meta data:', meta);
+                }
                 return state.apply(tr);
             }
         },
@@ -320,13 +352,12 @@ export function createCoreSuggestionPlugin({ onAccept, onConflictClick }) {
             },
             handleClick(view, pos, event) {
                 const target = event.target;
-
                 if (target.matches('.suggestion-highlight')) {
                     const conflictGroupId = target.getAttribute('data-conflict-group-id');
                     const suggestionId = target.getAttribute('data-suggestion-id');
 
                     if (conflictGroupId) {
-                        console.log(` crossroads clicked: ${conflictGroupId}`);
+                        console.log(`🌟 Creative crossroads clicked: ${conflictGroupId}`);
                         if (onConflictClick) {
                             const state = coreSuggestionPluginKey.getState(view.state);
                             const conflictGroup = state.suggestions.find(s => s.id === conflictGroupId);
@@ -334,7 +365,7 @@ export function createCoreSuggestionPlugin({ onAccept, onConflictClick }) {
                                 onConflictClick(conflictGroup);
                             }
                         }
-                        return true; 
+                        return true;
                     }
 
                     if (suggestionId) {
@@ -355,11 +386,25 @@ export function createCoreSuggestionPlugin({ onAccept, onConflictClick }) {
  */
 
 export function setSuggestions(view, suggestions) {
+    console.log('🔧 [SET_SUGGESTIONS] Entry point hit with:', suggestions?.length || 0, 'suggestions');
+    console.log('🔧 [SET_SUGGESTIONS] View state valid:', !!view?.state);
+    console.log('🔧 [SET_SUGGESTIONS] Plugin key:', coreSuggestionPluginKey);
+    console.log('🔧 [SET_SUGGESTIONS] Suggestions array:', suggestions);
+    console.log('🔧 [SET_SUGGESTIONS] First suggestion detailed:', suggestions?.[0]);
+    
+    if (!view || !view.state) {
+        console.error('🔧 [SET_SUGGESTIONS] ERROR: Invalid view or view.state');
+        return;
+    }
+    
     const tr = view.state.tr.setMeta(coreSuggestionPluginKey, {
         type: 'setSuggestions',
         suggestions
     });
+    
+    console.log('🔧 [SET_SUGGESTIONS] Transaction created, dispatching...');
     view.dispatch(tr);
+    console.log('🔧 [SET_SUGGESTIONS] Transaction dispatched successfully');
 }
 
 export function acceptSuggestion(view, suggestionId) {

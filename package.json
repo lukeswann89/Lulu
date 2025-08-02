@@ -2,10 +2,10 @@
   "name": "lulu-mvp-clean",
   "version": "1.0.0",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
+  "dev": "cross-env NODE_OPTIONS='--inspect' next dev",
+  "build": "next build",
+  "start": "next start"
+},
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",
     "@chakra-ui/react": "^3.19.1",
@@ -60,6 +60,7 @@
   "homepage": "https://github.com/lukeswann89/Lulu#readme",
   "devDependencies": {
     "@types/react": "19.1.5",
+    "cross-env": "^10.0.0",
     "typescript": "5.8.3"
   }
 }
