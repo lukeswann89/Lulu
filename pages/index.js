@@ -49,6 +49,7 @@ import SpecificEditsPanel from '../components/SpecificEditsPanel';
 import SuggestionConflictCard from '../components/SuggestionConflictCard';
 import EditorialPlanner from '../components/EditorialPlanner';
 import StrategyCard from '../components/StrategyCard';
+import SuggestionPopover from '../components/SuggestionPopover';
 // Workflow Imports
 import { useWorkflow } from '../context/WorkflowContext';
 import { useWorkflowActions } from '../hooks/useWorkflowActions';
@@ -103,6 +104,10 @@ function IndexV2() {
     // Red Line Grammar Check State
     const [isGrammarChecking, setIsGrammarChecking] = useState(false);
     const lastGrammarCheckTextRef = useRef(''); // Track last text that was grammar checked
+    // SuggestionPopover State (Direct DOM Solution)
+    const [popoverTarget, setPopoverTarget] = useState(null);
+    const [activePopoverSuggestion, setActivePopoverSuggestion] = useState(null);
+    const popoverCloseTimerRef = useRef(null); // Coyote Time: Delayed close timer
     const editorContainerRef = useRef(null);
     const viewRef = useRef(null);
     const sentenceLevelFetchedRef = useRef(new Set()); // Track which phases we've fetched
@@ -490,6 +495,14 @@ function IndexV2() {
             return;
         }
         
+        // 🚨 CRITICAL FIX: Immediately clear popover state to prevent ghost flash
+        if (popoverCloseTimerRef.current) {
+            clearTimeout(popoverCloseTimerRef.current);
+            popoverCloseTimerRef.current = null;
+        }
+        setPopoverTarget(null);
+        setActivePopoverSuggestion(null);
+        
         // Process the suggestion
         pmAcceptSuggestion(viewRef.current, suggestionId);
         
@@ -499,6 +512,81 @@ function IndexV2() {
         setActiveSuggestions(newSuggestions);
         setActiveConflictGroup(null);
     }, []);
+
+    // SuggestionPopover Event Handlers (Coyote Time Implementation)
+    const handleSuggestionMouseEnter = useCallback((suggestionId, event) => {
+        // Coyote Time: Cancel any pending close action before showing popover
+        if (popoverCloseTimerRef.current) {
+            clearTimeout(popoverCloseTimerRef.current);
+            popoverCloseTimerRef.current = null;
+        }
+        
+        const suggestion = activeSuggestions.find(s => s.id === suggestionId);
+        if (suggestion) {
+            setPopoverTarget(event.target);
+            setActivePopoverSuggestion(suggestion);
+        }
+    }, [activeSuggestions]);
+
+    const handleSuggestionMouseLeave = useCallback(() => {
+        // Coyote Time: Schedule delayed close with 300ms grace period
+        popoverCloseTimerRef.current = setTimeout(() => {
+            setPopoverTarget(null);
+            setActivePopoverSuggestion(null);
+            popoverCloseTimerRef.current = null;
+        }, 300);
+    }, []);
+
+    // Add placeholder handlers for the popover's own buttons
+    const handlePopoverAccept = useCallback((suggestionId) => handleAcceptChoice(suggestionId), [handleAcceptChoice]);
+    const handlePopoverLearnMore = useCallback((suggestion) => console.log("Learn More:", suggestion), []);
+    const handlePopoverIgnore = useCallback((suggestion) => console.log("Ignore:", suggestion), []);
+    const handlePopoverClose = useCallback(() => handleSuggestionMouseLeave(), [handleSuggestionMouseLeave]);
+
+    // Coyote Time: Popover mouse event handlers for "safe zone" behavior
+    const handlePopoverMouseEnter = useCallback(() => {
+        // Cancel any pending close action when mouse enters popover
+        if (popoverCloseTimerRef.current) {
+            clearTimeout(popoverCloseTimerRef.current);
+            popoverCloseTimerRef.current = null;
+        }
+    }, []);
+
+    const handlePopoverMouseLeave = useCallback(() => {
+        // Start new close timer when mouse leaves popover
+        handleSuggestionMouseLeave();
+    }, [handleSuggestionMouseLeave]);
+
+    // Direct DOM Solution: Bypass ProseMirror event system
+    useEffect(() => {
+        const editorContainer = editorContainerRef.current;
+        if (!editorContainer) return;
+
+        const handleMouseEnter = (event) => {
+            const target = event.target;
+            if (target.classList.contains('suggestion-highlight') && target.classList.contains('passive')) {
+                const suggestionId = target.getAttribute('data-suggestion-id');
+                if (suggestionId) {
+                    handleSuggestionMouseEnter(suggestionId, event);
+                }
+            }
+        };
+
+        const handleMouseLeave = (event) => {
+            const target = event.target;
+            if (target.classList.contains('suggestion-highlight') && target.classList.contains('passive')) {
+                handleSuggestionMouseLeave();
+            }
+        };
+
+        editorContainer.addEventListener('mouseenter', handleMouseEnter, true);
+        editorContainer.addEventListener('mouseleave', handleMouseLeave, true);
+
+        return () => {
+            editorContainer.removeEventListener('mouseenter', handleMouseEnter, true);
+            editorContainer.removeEventListener('mouseleave', handleMouseLeave, true);
+        };
+    }, [handleSuggestionMouseEnter, handleSuggestionMouseLeave]);
 
     // Render Components for Sophisticated Writer's Desk
     const renderManuscript = () => (
@@ -530,33 +618,48 @@ function IndexV2() {
 
     // Main Render - Sophisticated Writer's Desk Layout with Smart MentorWing
     return (
-        <WriterDesk
-            museWing={<MuseWing />}
-            manuscript={renderManuscript()}
-            mentorWing={
-                <MentorWing 
-                    manuscriptText={manuscriptText}
-                    actions={actions}
-                    currentPhase={currentPhase}
-                    isProcessing={isProcessing}
-                    // TASK 5: Pass Unified Suggestion State to MentorWing
-                    suggestions={activeSuggestions}
-                    activeConflictGroup={activeConflictGroup}
-                    onAcceptChoice={handleAcceptChoice}
-                    getEditMeta={getEditMeta}
-                    // Additional props for substantive phases
-                    currentGoal={currentGoal}
-                    goalEdits={goalEdits}
-                    isFetchingEdits={isFetchingEdits}
-                    currentGoalIndex={currentGoalIndex}
-                    substantiveGoals={substantiveGoals}
-                    onGoalComplete={handleGoalComplete}
-                    // Additional props for EditorialPlanner
-                    editorialPlan={editorialPlan}
-                    error={error}
+        <>
+            <WriterDesk
+                museWing={<MuseWing />}
+                manuscript={renderManuscript()}
+                mentorWing={
+                    <MentorWing 
+                        manuscriptText={manuscriptText}
+                        actions={actions}
+                        currentPhase={currentPhase}
+                        isProcessing={isProcessing}
+                        // TASK 5: Pass Unified Suggestion State to MentorWing
+                        suggestions={activeSuggestions}
+                        activeConflictGroup={activeConflictGroup}
+                        onAcceptChoice={handleAcceptChoice}
+                        getEditMeta={getEditMeta}
+                        // Additional props for substantive phases
+                        currentGoal={currentGoal}
+                        goalEdits={goalEdits}
+                        isFetchingEdits={isFetchingEdits}
+                        currentGoalIndex={currentGoalIndex}
+                        substantiveGoals={substantiveGoals}
+                        onGoalComplete={handleGoalComplete}
+                        // Additional props for EditorialPlanner
+                        editorialPlan={editorialPlan}
+                        error={error}
+                    />
+                }
+            />
+            {/* SuggestionPopover - Rendered outside WriterDesk to avoid layout conflicts */}
+            {activePopoverSuggestion && popoverTarget && (
+                <SuggestionPopover
+                    suggestion={activePopoverSuggestion}
+                    targetElement={popoverTarget}
+                    onAccept={handlePopoverAccept}
+                    onLearnMore={handlePopoverLearnMore}
+                    onIgnore={handlePopoverIgnore}
+                    onClose={handlePopoverClose}
+                    onPopoverEnter={handlePopoverMouseEnter}
+                    onPopoverLeave={handlePopoverMouseLeave}
                 />
-            }
-        />
+            )}
+        </>
     );
 }
 

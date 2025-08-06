@@ -7,11 +7,12 @@
  * - Added icons and descriptions for each consultation type
  * - Custom Edit option is visually disabled as requested
  * - Follows "Illuminate, Don't Dictate" principle with clear choices
+ * - NEW: Added isProcessing prop to disable buttons during processing
  */
 
 import React from 'react';
 
-const ConsultationMenu = ({ onSelect }) => {
+const ConsultationMenu = ({ onSelect, isProcessing = false }) => {
     const consultationOptions = [
         {
             key: 'focusEdit',
@@ -48,7 +49,7 @@ const ConsultationMenu = ({ onSelect }) => {
     ];
 
     const getCardStyles = (option) => {
-        if (!option.available) {
+        if (!option.available || isProcessing) {
             return 'bg-gray-100 border-gray-200 cursor-not-allowed opacity-60';
         }
         
@@ -62,7 +63,7 @@ const ConsultationMenu = ({ onSelect }) => {
     };
 
     const getIconStyles = (option) => {
-        if (!option.available) {
+        if (!option.available || isProcessing) {
             return 'text-gray-400';
         }
         
@@ -76,7 +77,7 @@ const ConsultationMenu = ({ onSelect }) => {
     };
 
     const getTitleStyles = (option) => {
-        if (!option.available) {
+        if (!option.available || isProcessing) {
             return 'text-gray-500';
         }
         
@@ -90,7 +91,7 @@ const ConsultationMenu = ({ onSelect }) => {
     };
 
     const handleOptionClick = (option) => {
-        if (option.available && onSelect) {
+        if (option.available && !isProcessing && onSelect) {
             onSelect(option.key);
         }
     };
@@ -102,6 +103,11 @@ const ConsultationMenu = ({ onSelect }) => {
                 <p className="text-sm text-green-600">
                     Choose how you'd like to receive editorial guidance for your manuscript.
                 </p>
+                {isProcessing && (
+                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+                        ⏳ Processing... Please wait.
+                    </div>
+                )}
             </div>
 
             <div className="space-y-4">
@@ -123,8 +129,13 @@ const ConsultationMenu = ({ onSelect }) => {
                                             Coming Soon
                                         </span>
                                     )}
+                                    {isProcessing && option.available && (
+                                        <span className="ml-2 text-xs bg-blue-200 text-blue-600 px-2 py-0.5 rounded-full">
+                                            Processing
+                                        </span>
+                                    )}
                                 </h4>
-                                <p className={`text-sm ${option.available ? 'text-gray-600' : 'text-gray-500'}`}>
+                                <p className={`text-sm ${option.available && !isProcessing ? 'text-gray-600' : 'text-gray-500'}`}>
                                     {option.description}
                                 </p>
                             </div>
