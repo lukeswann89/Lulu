@@ -101,6 +101,9 @@ function IndexV2() {
     // TASK 1: Unified Suggestion State - Single source of truth for all editor suggestions
     const [activeSuggestions, setActiveSuggestions] = useState([]);
     const [activeConflictGroup, setActiveConflictGroup] = useState(null);
+    // Focus Edit UI state centralized here
+    const [isFocusEditActive, setIsFocusEditActive] = useState(false);
+    const [isFocusEditProcessing, setIsFocusEditProcessing] = useState(false);
     // Red Line Grammar Check State
     const [isGrammarChecking, setIsGrammarChecking] = useState(false);
     const lastGrammarCheckTextRef = useRef(''); // Track last text that was grammar checked
@@ -261,18 +264,31 @@ function IndexV2() {
                         console.log('🎯 [DEBUG] Editor available, processing suggestions');
                         console.log('🎯 [DEBUG] viewRef.current.state.doc.content.size:', viewRef.current.state.doc.content.size);
                         
-                        // SURGICAL FIX: Replace placeholder position mapping with correct findPositionOfText logic
+                        //============== START: CORRECTED CODE BLOCK ==============
+                        // SURGICAL FIX: Map suggestions to ensure they have positions and a canonical ID
                         const suggestionsWithPositions = (fetchedSuggestions || []).map(s => {
-                            console.log('🎯 [DEBUG] Processing suggestion:', s);
-                            const position = findPositionOfText(viewRef.current.state.doc, s.original);
-                            if (position) {
-                                console.log('🎯 [DEBUG] Found position for suggestion:', s.original, 'at', position);
-                                return {...s, from: position.from, to: position.to};
-                            } else {
-                                console.warn('🎯 [DEBUG] Could not find position for suggestion:', s.original);
-                                return null;
+                          const position = findPositionOfText(viewRef.current.state.doc, s.original);
+                          if (position) {
+                            // 🔧 CRITICAL FIX: Generate canonical ID for every suggestion
+                            const canonicalId = generateSuggestionId(
+                              s.original,
+                              s.suggestion || s.replacement || '',
+                              { editType: s.editType || currentPhase || 'line' }
+                            );
+
+                            const suggestion = { ...s, id: canonicalId, from: position.from, to: position.to };
+
+                            // 🛡️ DEFENSIVE GUARD: Ensure the fix worked
+                            if (!suggestion.id) {
+                              console.error('DEFENSIVE GUARD FAILED: A suggestion was just processed without an ID!', suggestion);
                             }
+                            return suggestion;
+                          } else {
+                            console.warn('🎯 [DEBUG] Could not find position for suggestion:', s.original);
+                            return null;
+                          }
                         }).filter(Boolean); // Remove null entries where position wasn't found
+                        //============== END: CORRECTED CODE BLOCK ==============
                         console.log('🎯 [DEBUG] Suggestions with positions:', suggestionsWithPositions);
                         
                         console.log('🎯 [DEBUG] About to call ConflictGrouper.groupOverlaps');
@@ -616,6 +632,60 @@ function IndexV2() {
 
 
 
+    // Focus Edit: centralized action to fetch and canonicalize suggestions
+    const startFocusEdit = useCallback(async () => {
+        if (!viewRef.current) return;
+        setIsFocusEditActive(true);
+        setIsFocusEditProcessing(true);
+        try {
+            const response = await fetch('/api/focus-edit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: manuscriptText }),
+            });
+            if (!response.ok) throw new Error(`Focus Edit API request failed: ${response.status}`);
+            const apiResult = await response.json();
+            const fetched = apiResult?.suggestions || [];
+
+            // Map positions and canonical IDs exactly like sentence-level flow
+            const positioned = (fetched || []).map(s => {
+                const position = findPositionOfText(viewRef.current.state.doc, s.original);
+                if (!position) return null;
+                const canonicalId = generateSuggestionId(
+                    s.original,
+                    s.suggestion || s.replacement || '',
+                    { editType: s.editType || currentPhase || 'line' }
+                );
+                const suggestion = { ...s, id: canonicalId, from: position.from, to: position.to };
+                if (!suggestion.id) {
+                    console.error('DEFENSIVE GUARD FAILED: A suggestion was just processed without an ID!', suggestion);
+                }
+                return suggestion;
+            }).filter(Boolean);
+
+            const grouped = ConflictGrouper.groupOverlaps(positioned);
+            setActiveSuggestions(grouped);
+        } catch (err) {
+            console.error('Focus Edit request failed:', err);
+        } finally {
+            setIsFocusEditProcessing(false);
+        }
+    }, [manuscriptText, currentPhase]);
+
+    const handleConsultationSelect = useCallback((consultationType) => {
+        if (consultationType === 'focusEdit') {
+            startFocusEdit();
+            return;
+        }
+        // Other types handled inside MentorWing (UI-only)
+    }, [startFocusEdit]);
+
+    const handleResetFocusEdit = useCallback(() => {
+        setIsFocusEditActive(false);
+        setIsFocusEditProcessing(false);
+        // Do not clear activeSuggestions here; caller controls when to clear
+    }, []);
+
     // Main Render - Sophisticated Writer's Desk Layout with Smart MentorWing
     return (
         <>
@@ -643,6 +713,11 @@ function IndexV2() {
                         // Additional props for EditorialPlanner
                         editorialPlan={editorialPlan}
                         error={error}
+                        // Focus Edit control props
+                        isFocusEditActive={isFocusEditActive}
+                        isFocusEditProcessing={isFocusEditProcessing}
+                        onConsultationSelect={handleConsultationSelect}
+                        onResetFocusEdit={handleResetFocusEdit}
                     />
                 }
             />

@@ -43,36 +43,64 @@ const MentorWing = ({
     // Additional props needed for EditorialPlanner
     editorialPlan,
     error,
-    // Focus Edit control props (presentational only)
-    isFocusEditActive,
-    isFocusEditProcessing,
-    onConsultationSelect,
-    onResetFocusEdit,
     className = "" 
 }) => {
     // Only local state needed: temporary UI states
     const [showPlanner, setShowPlanner] = useState(false);
+    const [focusEditSuggestions, setFocusEditSuggestions] = useState([]);
+    const [isFocusEditActive, setIsFocusEditActive] = useState(false);
+    const [isFocusEditProcessing, setIsFocusEditProcessing] = useState(false);
+
+    // Handle consultation selection - sets temporary states only
+    const handleConsultationSelect = useCallback(async (consultationType) => {
+        switch (consultationType) {
+            case 'focusEdit':
+                setIsFocusEditActive(true);
+                setFocusEditSuggestions([]);
+                setIsFocusEditProcessing(true);
+                
+                try {
+                    // NEW: Use dedicated focus-edit endpoint for "Effortless Flow" experience
+                    const response = await fetch('/api/focus-edit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: manuscriptText }),
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Focus Edit API request failed: ${response.status}`);
+                    }
+                    
+                    const apiResult = await response.json();
+                    const suggestions = apiResult?.suggestions || [];
+                    setFocusEditSuggestions(suggestions);
+                } catch (error) {
+                    console.error('Focus Edit request failed:', error);
+                    setFocusEditSuggestions([]);
+                } finally {
+                    setIsFocusEditProcessing(false);
+                }
+                break;
+                
+            case 'deepDive':
+                setShowPlanner(true);
+                break;
+                
+            case 'editorialReport':
+                setShowPlanner(true);
+                break;
+                
+            default:
+                console.warn('Unknown consultation type:', consultationType);
+        }
+    }, [manuscriptText]);
 
     // Reset temporary states
     const handleResetToMenu = useCallback(() => {
         setShowPlanner(false);
-        if (onResetFocusEdit) onResetFocusEdit();
-    }, [onResetFocusEdit]);
-
-    // Local wrapper to route menu selections:
-    // - focusEdit → delegate to parent via onConsultationSelect
-    // - deepDive/editorialReport → handled locally (UI-only)
-    const handleMenuSelect = useCallback((consultationType) => {
-        if (consultationType === 'focusEdit') {
-            if (onConsultationSelect) onConsultationSelect('focusEdit');
-            return;
-        }
-        if (consultationType === 'deepDive' || consultationType === 'editorialReport') {
-            setShowPlanner(true);
-            return;
-        }
-        console.warn('Unknown consultation type:', consultationType);
-    }, [onConsultationSelect]);
+        setFocusEditSuggestions([]);
+        setIsFocusEditActive(false);
+    }, []);
 
     // Back button for temporary states
     const renderBackButton = () => (
@@ -123,7 +151,7 @@ const MentorWing = ({
                         </div>
                     ) : (
                         <SpecificEditsPanel 
-                            suggestions={suggestions} 
+                            suggestions={focusEditSuggestions} 
                             onAccept={onAcceptChoice} 
                             onReject={() => {}} 
                             onRevise={() => {}} 
@@ -236,7 +264,7 @@ const MentorWing = ({
             // Default menu for assessment phase
             return (
                 <div className={`h-full ${className}`}>
-                    <ConsultationMenu onSelect={handleMenuSelect} isProcessing={isProcessing || isFocusEditProcessing} />
+                    <ConsultationMenu onSelect={handleConsultationSelect} isProcessing={isProcessing || isFocusEditProcessing} />
                 </div>
             );
         }
@@ -245,7 +273,7 @@ const MentorWing = ({
     // Fallback: show consultation menu
     return (
         <div className={`h-full ${className}`}>
-            <ConsultationMenu onSelect={handleMenuSelect} isProcessing={isProcessing || isFocusEditProcessing} />
+            <ConsultationMenu onSelect={handleConsultationSelect} isProcessing={isProcessing || isFocusEditProcessing} />
         </div>
     );
 };
