@@ -1,0 +1,14 @@
+services:
+  languagetool:
+    image: erikvl87/languagetool
+    ports:
+      - "8081:8010"
+    volumes:
+      - ./ngrams:/ngrams:ro
+    environment:
+      # Correct environment variables for this specific image
+      - langtool_languageModel=/ngrams
+      - langtool_public=true
+      # The image's default internal port is 8010, so we don't need to set it.
+      - JAVA_TOOL_OPTIONS=-Xms512m -Xmx2g
+

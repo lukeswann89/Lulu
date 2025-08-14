@@ -63,19 +63,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing manuscript text.' });
   }
 
-  let openai;
-  try {
-    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  } catch (e) {
-    console.error("Failed to initialize OpenAI client:", e);
-    return res.status(500).json({ error: 'OpenAI client configuration error.' });
-  }
-
   const chunks = chunkText(text, 3500);
   const outputs = [];
   const failedChunks = [];
 
   try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     for (const chunk of chunks) {
       const prompt = buildFocusPrompt({ manuscript: chunk });
 

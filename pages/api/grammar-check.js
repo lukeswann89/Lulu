@@ -33,9 +33,10 @@ export default async function handler(req, res) {
       params.append('text', text);
       params.append('language', 'en-US');
   
-      // --- ARCHITECT'S NOTE: This is the corrected fetch call structure. ---
+    // --- ARCHITECT'S NOTE: This is the corrected fetch call structure. ---
       // It points to the local server and has the correct syntax.
-      const response = await fetch('http://localhost:8081/v2/check', {
+    const LT_URL = process.env.LT_URL || 'http://localhost:8081';
+    const response = await fetch(`${LT_URL}/v2/check`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

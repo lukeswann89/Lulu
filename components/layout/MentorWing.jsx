@@ -18,6 +18,7 @@ import React, { useState, useCallback } from 'react';
 import ConsultationMenu from '../mentor/ConsultationMenu';
 import EditorialPlanner from '../EditorialPlanner';
 import SpecificEditsPanel from '../SpecificEditsPanel';
+import PolishStudio from '../PolishStudio';
 import SuggestionConflictCard from '../SuggestionConflictCard';
 import StrategyCard from '../StrategyCard';
 
@@ -32,6 +33,7 @@ const MentorWing = ({
     suggestions,
     activeConflictGroup,
     onAcceptChoice,
+    onRejectChoice,
     getEditMeta,
     // Additional props needed for substantive phases
     currentGoal,
@@ -48,6 +50,8 @@ const MentorWing = ({
     isFocusEditProcessing,
     onConsultationSelect,
     onResetFocusEdit,
+    initialManuscriptText,
+    onApplyWithLulu,
     className = "" 
 }) => {
     // Only local state needed: temporary UI states
@@ -122,13 +126,15 @@ const MentorWing = ({
                             <SuggestionConflictCard conflictGroup={activeConflictGroup} onAccept={onAcceptChoice} />
                         </div>
                     ) : (
-                        <SpecificEditsPanel 
-                            suggestions={suggestions} 
-                            onAccept={onAcceptChoice} 
-                            onReject={() => {}} 
-                            onRevise={() => {}} 
+                        <PolishStudio
+                            suggestions={suggestions}
+                            onAccept={onAcceptChoice}
+                            onReject={onRejectChoice}
+                            onRevise={() => {}}
                             getEditMeta={getEditMeta}
-                            simpleMode={true}
+                            initialText={initialManuscriptText || manuscriptText}
+                            finalText={manuscriptText}
+                            onApplyWithLulu={onApplyWithLulu}
                         />
                     )}
                 </div>

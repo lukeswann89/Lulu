@@ -98,6 +98,7 @@ function IndexV2() {
     } = workflowState;
 
     const [manuscriptText, setManuscriptText] = useState("Lachesis ran her hand through her hair and focused her pacing gaze on Sylvia's hands. \"And what have you done since you came to this world?\" the Director asked. \"What has seemed to be most important to you?\" She had went to the store yesterday.");
+    const initialManuscriptTextRef = useRef(null);
     // TASK 1: Unified Suggestion State - Single source of truth for all editor suggestions
     const [activeSuggestions, setActiveSuggestions] = useState([]);
     const [activeConflictGroup, setActiveConflictGroup] = useState(null);
@@ -184,6 +185,8 @@ function IndexV2() {
         }});
 
         viewRef.current = view;
+        // Capture the initial manuscript text for Editorial Report
+        initialManuscriptTextRef.current = manuscriptText;
         console.log('📝 [DEBUG] ProseMirror editor created successfully');
         
         // DIAGNOSTIC: Test direct plugin communication after initialization
@@ -529,6 +532,40 @@ function IndexV2() {
         setActiveConflictGroup(null);
     }, []);
 
+    // Soft reject: remove suggestion from plugin and unified state without applying
+    const handleRejectChoice = useCallback((suggestionId) => {
+        if (!viewRef.current) return;
+
+        const currentPluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
+        if (!currentPluginState) return;
+
+        // Remove the target suggestion id from both flat and conflict groups
+        const prune = (list) => {
+            const result = [];
+            for (const s of list) {
+                if (s.isConflictGroup && Array.isArray(s.suggestions)) {
+                    const prunedChildren = s.suggestions.filter(child => child.id !== suggestionId);
+                    if (prunedChildren.length > 1) {
+                        result.push({ ...s, suggestions: prunedChildren });
+                    } else if (prunedChildren.length === 1) {
+                        result.push(prunedChildren[0]);
+                    }
+                } else if (s.id !== suggestionId) {
+                    result.push(s);
+                }
+            }
+            return result;
+        };
+
+        const newSuggestions = prune(currentPluginState.suggestions || []);
+        try {
+            pmSetSuggestions(viewRef.current, newSuggestions);
+            setActiveSuggestions(newSuggestions);
+        } catch (e) {
+            console.error('Reject failed to update suggestions:', e);
+        }
+    }, []);
+
     // SuggestionPopover Event Handlers (Coyote Time Implementation)
     const handleSuggestionMouseEnter = useCallback((suggestionId, event) => {
         // Coyote Time: Cancel any pending close action before showing popover
@@ -558,6 +595,10 @@ function IndexV2() {
     const handlePopoverLearnMore = useCallback((suggestion) => console.log("Learn More:", suggestion), []);
     const handlePopoverIgnore = useCallback((suggestion) => console.log("Ignore:", suggestion), []);
     const handlePopoverClose = useCallback(() => handleSuggestionMouseLeave(), [handleSuggestionMouseLeave]);
+    // Editorial Report MVP callback
+    const handleApplyWithLulu = useCallback((goal) => {
+        console.log(`// TODO: Initiate Deep Dive with goal: ${goal}`);
+    }, []);
 
     // Coyote Time: Popover mouse event handlers for "safe zone" behavior
     const handlePopoverMouseEnter = useCallback(() => {
@@ -702,6 +743,7 @@ function IndexV2() {
                         suggestions={activeSuggestions}
                         activeConflictGroup={activeConflictGroup}
                         onAcceptChoice={handleAcceptChoice}
+                        onRejectChoice={() => {}}
                         getEditMeta={getEditMeta}
                         // Additional props for substantive phases
                         currentGoal={currentGoal}
@@ -718,6 +760,9 @@ function IndexV2() {
                         isFocusEditProcessing={isFocusEditProcessing}
                         onConsultationSelect={handleConsultationSelect}
                         onResetFocusEdit={handleResetFocusEdit}
+                        // Editorial Report props
+                        initialManuscriptText={initialManuscriptTextRef.current}
+                        onApplyWithLulu={handleApplyWithLulu}
                     />
                 }
             />

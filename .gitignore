@@ -28,3 +28,13 @@ Thumbs.db
 CursorUserSetup*
 
 .vercel
+
+# Ignore the large n-gram data assets
+/ngrams
+
+# Ignore Next.js build cache and output
+/.next/
+/out/
+
+# Ignore node modules
+/node_modules*.zip

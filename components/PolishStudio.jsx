@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SpecificEditCard from './SpecificEditCard';
+import EditorialReport from './EditorialReport';
 
 /**
  * PolishStudio - MVP container for chronologically ordered Focus Edit workflow
@@ -14,12 +15,17 @@ export default function PolishStudio({
   onRevise = () => {},
   onActiveSuggestionChange = () => {},
   getEditMeta,
-  className = ''
+  className = '',
+  initialText = '',
+  finalText = '',
+  onApplyWithLulu = () => {}
 }) {
   // View state
   // MVP: Focus-only view
-  const [phase, setPhase] = useState('brief'); // 'brief' | 'review' | 'victory'
+  const [phase, setPhase] = useState('review'); // 'review' | 'report'
   const [activeSuggestionId, setActiveSuggestionId] = useState(null);
+  const [decisions, setDecisions] = useState([]); // {suggestion, action: 'accept'|'reject'}
+  const sessionStartedRef = useRef(false);
 
   // Flatten conflict groups (if any) and sort by position (from)
   const flatSorted = useMemo(() => {
@@ -47,10 +53,12 @@ export default function PolishStudio({
   // Phase transitions
   useEffect(() => {
     if (!hasSuggestions) {
-      setPhase(prev => (prev === 'brief' ? 'brief' : 'victory'));
-    } else if (phase === 'victory') {
-      // If new suggestions arrive, return to brief
-      setPhase('brief');
+      if (sessionStartedRef.current) {
+        setPhase('report');
+      }
+    } else {
+      // When suggestions are present, ensure we're in review mode
+      setPhase('review');
     }
   }, [hasSuggestions]);
 
@@ -61,9 +69,10 @@ export default function PolishStudio({
 
   // Start review handler
   const handleStart = useCallback(() => {
-    setPhase('review');
-    setViewMode('focus');
+    // Start reviewing immediately (brief removed)
     if (flatSorted.length > 0) setActiveSuggestionId(flatSorted[0].id);
+    setDecisions([]);
+    sessionStartedRef.current = true;
   }, [flatSorted]);
 
   // Advance helpers
@@ -94,21 +103,43 @@ export default function PolishStudio({
   const handleAccept = useCallback((id) => {
     const targetId = id || activeSuggestionId;
     if (!targetId) return;
+    const targetSuggestion = flatSorted.find(s => s.id === targetId) || null;
     onAccept(targetId);
+    if (targetSuggestion) {
+      setDecisions(prev => [...prev, { suggestion: targetSuggestion, action: 'accept' }]);
+    }
     // Auto-advance after a short delay to allow parent state to reconcile
     setTimeout(() => {
       focusNext();
     }, 200);
+    // DIAGNOSTIC: compute remaining list locally for transition check
+    const newSuggestionList = flatSorted.filter(s => s.id !== targetId);
+    console.log('🔍 [DIAGNOSTIC] Suggestion actioned. Remaining suggestions:', newSuggestionList.length);
+    if (newSuggestionList.length === 0) {
+      console.log('🔍 [DIAGNOSTIC] Transitioning phase from review to report...');
+      setPhase('report');
+    }
   }, [activeSuggestionId, onAccept, focusNext]);
 
   const handleReject = useCallback((id) => {
     const targetId = id || activeSuggestionId;
     if (!targetId) return;
+    const targetSuggestion = flatSorted.find(s => s.id === targetId) || null;
     onReject(targetId);
+    if (targetSuggestion) {
+      setDecisions(prev => [...prev, { suggestion: targetSuggestion, action: 'reject' }]);
+    }
     setTimeout(() => {
       focusNext();
     }, 120);
-  }, [activeSuggestionId, onReject, focusNext]);
+    // DIAGNOSTIC: compute remaining list locally for transition check
+    const newSuggestionList = flatSorted.filter(s => s.id !== targetId);
+    console.log('🔍 [DIAGNOSTIC] Suggestion actioned. Remaining suggestions:', newSuggestionList.length);
+    if (newSuggestionList.length === 0) {
+      console.log('🔍 [DIAGNOSTIC] Transitioning phase from review to report...');
+      setPhase('report');
+    }
+  }, [activeSuggestionId, onReject, focusNext, flatSorted]);
 
   // Keyboard navigation (N/P/A/R). Ignore when typing in inputs/textareas.
   useEffect(() => {
@@ -142,28 +173,17 @@ export default function PolishStudio({
     </div>
   );
 
-  const renderBrief = () => (
-    <div className="text-center p-8 bg-blue-50 rounded-lg border border-blue-200">
-      <div className="text-4xl mb-3">🛫</div>
-      <p className="text-lg font-semibold text-blue-800 mb-2">Pre-Flight Brief</p>
-      <p className="text-sm text-blue-700 mb-4">{hasSuggestions ? `${flatSorted.length} suggestions ready in chronological order.` : 'No suggestions at the moment.'}</p>
-      {hasSuggestions && (
-        <button
-          onClick={handleStart}
-          className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Start Review (N/P/A/R)
-        </button>
-      )}
-    </div>
-  );
+  // Brief removed in surgical repair. Immediately start when suggestions available.
 
-  const renderVictory = () => (
-    <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200">
-      <div className="text-4xl mb-3">🎉</div>
-      <p className="text-lg font-semibold text-green-800 mb-2">Victory! All suggestions processed.</p>
-      <p className="text-sm text-green-700">Enjoy the polish.</p>
-    </div>
+  // Victory removed for MVP.
+
+  const renderReport = () => (
+    <EditorialReport
+      suggestionsReviewed={decisions}
+      initialText={initialText}
+      finalText={finalText}
+      onApplyWithLulu={onApplyWithLulu}
+    />
   );
 
   // Overview removed for MVP scope
@@ -194,16 +214,21 @@ export default function PolishStudio({
     );
   };
 
+  // DIAGNOSTIC: render-phase tracer
+  console.log('🔍 [DIAGNOSTIC] Current render phase:', phase);
+
   return (
     <div className={`bg-white p-4 rounded shadow ${className}`}>
       {renderHeader()}
-      {!hasSuggestions ? (
-        renderBrief()
-      ) : phase === 'brief' ? (
-        renderBrief()
-      ) : phase === 'victory' ? (
-        renderVictory()
-      ) : renderFocus()}
+      {phase === 'report' ? (
+        renderReport()
+      ) : hasSuggestions ? (
+        // Immediately enter review mode when suggestions exist
+        (sessionStartedRef.current || handleStart(), renderFocus())
+      ) : (
+        // No suggestions to review (empty state). If session had started and suggestions were exhausted, phase will be 'report'.
+        <div className="text-center p-6 text-gray-500">No suggestions at the moment.</div>
+      )}
     </div>
   );
 }
