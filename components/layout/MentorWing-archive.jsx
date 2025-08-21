@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { apiClient } from '../../utils/apiClient';
 import ConsultationMenu from '../mentor/ConsultationMenu';
 import EditorialPlanner from '../EditorialPlanner';
 import SpecificEditsPanel from '../SpecificEditsPanel';
@@ -61,18 +62,12 @@ const MentorWing = ({
                 
                 try {
                     // NEW: Use dedicated focus-edit endpoint for "Effortless Flow" experience
-                    const response = await fetch('/api/focus-edit', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: manuscriptText }),
-                    });
+                    const { data, meta } = await apiClient.post('/api/focus-edit', { text: manuscriptText });
+                    const suggestions = data?.suggestions || [];
                     
-                    if (!response.ok) {
-                        throw new Error(`Focus Edit API request failed: ${response.status}`);
-                    }
+                    // Optional: observability
+                    console.debug('[FocusEdit] meta', meta);
                     
-                    const apiResult = await response.json();
-                    const suggestions = apiResult?.suggestions || [];
                     setFocusEditSuggestions(suggestions);
                 } catch (error) {
                     console.error('Focus Edit request failed:', error);

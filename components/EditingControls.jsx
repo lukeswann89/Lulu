@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { api } from '../utils/api'; // Add import at the top of the file
 
 const editOptions = [
   { 
@@ -91,13 +92,7 @@ export function EditingControls({
       setIsAnalyzing(true);
       // Run manuscript analysis
       try {
-        const response = await fetch('/api/manuscript-analysis', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, writerNotes })
-        });
-        
-        const analysis = await response.json();
+        const { data: analysis } = await api.post('/api/manuscript-analysis', { text, writerNotes });
         // Handle analysis results and show recommendation
         // This will be implemented in Phase 2
         console.log('Analysis complete:', analysis);

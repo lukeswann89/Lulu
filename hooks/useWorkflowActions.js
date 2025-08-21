@@ -8,6 +8,7 @@
 // - TASK 1 FIX: Updated executeApprovedPlan to accept optional filteredGoals parameter
 
 import { useCallback, useRef, useEffect } from 'react';
+import { api } from '../utils/api'; // Import our new universal utility
 import { useWorkflow } from '../context/WorkflowContext';
 
 // Map workflow phases to API edit types
@@ -32,20 +33,27 @@ export function useWorkflowActions() {
 
   // This is the full, working version.
   const prepareEditorialPlan = useCallback(async (writerNotes, manuscriptText) => {
-    dispatch({ type: 'PREPARE_PLAN_START' });
-    try {
-      const response = await fetch('/api/editorial-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manuscriptText, writerNotes }),
-      });
-      if (!response.ok) throw new Error('API request failed.');
-      const apiResult = await response.json();
-      dispatch({ type: 'PREPARE_PLAN_SUCCESS', payload: { editorialPlan: apiResult.editorialPlan } });
-    } catch (error) {
-      dispatch({ type: 'PREPARE_PLAN_FAILURE', payload: { error: error.message } });
-    }
-  }, [dispatch]);
+  dispatch({ type: 'PREPARE_PLAN_START' });
+  try {
+    const { data, meta } = await api.post('/api/editorial-plan', { manuscriptText, writerNotes });
+    
+    // Extract the planArray from the 'data' object.
+    const planArray = data?.editorialPlan || [];
+
+    // Log the successful reception of the plan for verification.
+    console.log('[DeepDive] Editorial plan received and processed:', {
+      goalsFound: planArray.length,
+      firstGoal: planArray[0]?.id || 'none',
+      meta: meta
+    });
+    
+    dispatch({ type: 'PREPARE_PLAN_SUCCESS', payload: { editorialPlan: planArray } });
+    
+  } catch (error) {
+    console.error('[DeepDive] Error preparing editorial plan:', error);
+    dispatch({ type: 'PREPARE_PLAN_FAILURE', payload: { error: error.message } });
+  }
+}, [dispatch]);
 
   // This is the stable version that uses the ref and will NOT cause a loop.
   // MODIFICATION: Added optional overrideEditTypes parameter for Focus Edit consultation
@@ -70,20 +78,14 @@ export function useWorkflowActions() {
       
       console.log('🔍 [DEBUG] About to call fetch API');
       // Use the new sentence-level-edits endpoint for cascade workflow
-      const response = await fetch('/api/sentence-level-edits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: manuscriptText, editTypes: editTypesForAPI }),
-      });
+      const { data, meta } = await api.post('/api/sentence-level-edits', { text: manuscriptText, editTypes: editTypesForAPI });
       
-      console.log('🔍 [DEBUG] Fetch response received, ok:', response.ok);
-      if (!response.ok) throw new Error(`API request failed: ${response.status}`);
+      console.log('🔍 [DEBUG] Fetch response received, data extracted');
       
-      console.log('🔍 [DEBUG] Parsing JSON response');
-      const apiResult = await response.json();
-      console.log('🔍 [DEBUG] API result:', apiResult);
+      // Optional: observability
+      console.debug('[SentenceLevelEdits] meta', meta);
       
-      const suggestionsFromApi = apiResult?.suggestions || [];
+      const suggestionsFromApi = data?.suggestions || [];
       console.log('🔍 [DEBUG] Extracted suggestions:', suggestionsFromApi.length, 'items');
       
       console.log('🔍 [DEBUG] Setting isProcessing to false');
@@ -103,14 +105,11 @@ export function useWorkflowActions() {
   const fetchEditsForGoal = useCallback(async (goal, manuscriptText) => {
     dispatch({ type: 'FETCH_GOAL_EDITS_START', payload: { goalId: goal.id } });
     try {
-      const response = await fetch('/api/get-edits-for-goal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal: goal.goal, manuscriptText }),
-      });
-      if (!response.ok) throw new Error('The new intelligence API failed to respond.');
-      const edits = await response.json();
-      dispatch({ type: 'FETCH_GOAL_EDITS_SUCCESS', payload: { goalId: goal.id, edits } });
+      const { data, meta } = await api.post('/api/get-edits-for-goal', { goal: goal.goal, manuscriptText });
+      dispatch({ type: 'FETCH_GOAL_EDITS_SUCCESS', payload: { goalId: goal.id, edits: data } });
+      
+      // Optional: observability
+      console.debug('[GetEditsForGoal] meta', meta);
     } catch (error) {
       console.error('Error fetching edits for goal:', error);
       dispatch({ type: 'FETCH_GOAL_EDITS_FAILURE', payload: { goalId: goal.id } });
@@ -120,13 +119,12 @@ export function useWorkflowActions() {
   const prefetchEditsForGoal = useCallback(async (goal, manuscriptText) => {
     if (workflowStateRef.current.goalEdits[goal.id]) return;
     try {
-      const response = await fetch('/api/get-edits-for-goal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal: goal.goal, manuscriptText }),
-      });
-      if (!response.ok) return;
-      const edits = await response.json();
+      const { data, meta } = await api.post('/api/get-edits-for-goal', { goal: goal.goal, manuscriptText });
+      
+      // Optional: observability
+      console.debug('[PrefetchEditsForGoal] meta', meta);
+      
+      const edits = data;
       dispatch({ type: 'FETCH_GOAL_EDITS_SUCCESS', payload: { goalId: goal.id, edits } });
     } catch (error) {
       console.warn('Sous-Chef pre-fetch failed silently:', error);
@@ -135,6 +133,37 @@ export function useWorkflowActions() {
 
   const executeApprovedPlan = useCallback((workflowType, filteredGoals) => { 
     dispatch({ type: 'EXECUTE_APPROVED_PLAN', payload: { workflowType, filteredGoals } }); 
+  }, [dispatch]);
+
+  const fetchDeepDiveEdits = useCallback(async (strategyCardIds, manuscriptText) => {
+    if (!strategyCardIds || strategyCardIds.length === 0) {
+      console.warn('[DeepDive] No strategy card IDs provided');
+      return [];
+    }
+    console.log('[DeepDive] Fetching specific edits for strategy cards:', strategyCardIds);
+    try {
+      const { data, meta } = await api.post('/api/deep-dive-edits', {
+        text: manuscriptText,
+        strategyCardIds,
+        severity: 'medium'
+      });
+      
+      console.debug('[DeepDive] meta', meta);
+      
+      const suggestions = data?.suggestions || [];
+      console.log('[DeepDive] Received suggestions:', { count: suggestions.length, first: suggestions[0] });
+  
+      // FIX: Dispatch the successful result to the state reducer to be stored.
+      dispatch({ type: 'FETCH_DEEP_DIVE_SUCCESS', payload: { suggestions } });
+      
+      return suggestions;
+    } catch (error) {
+      console.error('[DeepDive] Error fetching specific edits:', error);
+  
+      // FIX: Dispatch a failure action for consistent state management.
+      dispatch({ type: 'FETCH_DEEP_DIVE_FAILURE' });
+      return [];
+    }
   }, [dispatch]);
   
   // TASK 2 FIX: Action to update goal edits with position mapping
@@ -149,6 +178,7 @@ export function useWorkflowActions() {
   return {
     prepareEditorialPlan,
     executeApprovedPlan,
+    fetchDeepDiveEdits,
     fetchSuggestionsForPhase,
     completeCurrentPhase,
     resetWorkflow,

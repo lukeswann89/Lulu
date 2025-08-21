@@ -11,13 +11,15 @@ export const initialState = {
   error: null,
   completedPhases: new Set(),
   editorialPlan: null,
-  currentGoalIndex: null, 
-  goalEdits: {}, 
+  currentGoalIndex: null,
+  goalEdits: {},
   isFetchingEdits: false, 
 };
 
 export function workflowReducer(state, action) {
   switch (action.type) {
+    // ... all of your other cases from PREPARE_PLAN_START to FETCH_GOAL_EDITS_FAILURE remain the same ...
+    
     case 'PREPARE_PLAN_START': {
       return { ...state, isProcessing: true, error: null, editorialPlan: null };
     }
@@ -26,6 +28,7 @@ export function workflowReducer(state, action) {
         ...state,
         isProcessing: false,
         editorialPlan: action.payload.editorialPlan,
+        error: null,
       };
     }
     case 'PREPARE_PLAN_FAILURE': {
@@ -38,7 +41,6 @@ export function workflowReducer(state, action) {
         if (!newWorkflow) return state;
         const isSubstantiveWorkflow = newWorkflow.phases.includes('developmental') || newWorkflow.phases.includes('structural');
         
-        // TASK 1 FIX: If filteredGoals provided, save only selected goals to editorialPlan
         const updatedEditorialPlan = filteredGoals ? filteredGoals : state.editorialPlan;
         
         return {
@@ -77,6 +79,40 @@ export function workflowReducer(state, action) {
           [action.payload.goalId]: { status: 'error', edits: [] },
         }
       };
+    
+    // FIX: This new logic correctly distributes the fetched edits to ALL selected goals.
+    case 'FETCH_DEEP_DIVE_SUCCESS': {
+      const newGoalEdits = { ...state.goalEdits };
+      const allSuggestions = action.payload.suggestions;
+
+      // Find the goals that were just requested
+      const requestedGoalIds = (state.editorialPlan || [])
+        .filter(goal => goal.isSelected !== false) // Assuming default is selected
+        .map(goal => goal.id);
+
+      // Assign the entire batch of suggestions to each requested goal's edit list
+      requestedGoalIds.forEach(goalId => {
+        newGoalEdits[goalId] = {
+          status: 'loaded',
+          edits: allSuggestions
+        };
+      });
+
+      return {
+        ...state,
+        isProcessing: false,
+        goalEdits: newGoalEdits,
+        error: null,
+      };
+    }
+
+    case 'FETCH_DEEP_DIVE_FAILURE':
+      return {
+        ...state,
+        isProcessing: false,
+        error: 'Failed to fetch specific edits.',
+      };
+    
     case 'ADVANCE_GOAL': {
       if (state.currentGoalIndex === null) return state;
       const nextIndex = state.currentGoalIndex + 1;
@@ -125,11 +161,13 @@ export function workflowReducer(state, action) {
 }
 
 export const WorkflowContext = createContext();
+
 export function WorkflowProvider({ children }) {
   const [state, dispatch] = useReducer(workflowReducer, initialState);
   const value = { state, dispatch };
   return ( <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider> );
 }
+
 export function useWorkflow() {
   const context = useContext(WorkflowContext);
   if (context === undefined) {

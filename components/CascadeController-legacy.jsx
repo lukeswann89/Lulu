@@ -2,6 +2,7 @@
 // MASTER WORKFLOW ORCHESTRATOR: Handles Professional Publishing Cascade Logic
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '../utils/apiClient';
 import { getEditMeta } from '../utils/editorConfig';
 
 // Edit level hierarchy with cascade rules
@@ -166,39 +167,32 @@ export default function CascadeController({
         console.log('🔄 Generating cascade edits:', cascadeData);
       }
 
-      const response = await fetch('/api/cascade-handler', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceEdit: cascadeData.sourceEdit,
-          sourceLevel: cascadeData.sourceLevel,
-          targetLevels: cascadeData.targetLevels,
-          originalText: cascadeData.originalText,
-          context: {
-            workflow: currentWorkflow,
-            phase: currentPhase,
-            existingSuggestions: suggestions,
-            specificEdits: specificEdits
-          }
-        })
-      });
-
-      const cascadeResult = await response.json();
-      
-      if (response.ok) {
-        // Notify parent component of new cascade edits
-        onCascadeEdit(cascadeResult.cascadeEdits, cascadeData.targetLevels);
-        
-        // Remove from pending queue
-        setPendingCascades(prev => 
-          prev.filter(p => p.timestamp !== cascadeData.timestamp)
-        );
-
-        if (debug) {
-          console.log('✅ Cascade edits generated:', cascadeResult.cascadeEdits);
+      const { data, meta } = await apiClient.post('/api/cascade-handler', {
+        sourceEdit: cascadeData.sourceEdit,
+        sourceLevel: cascadeData.sourceLevel,
+        targetLevels: cascadeData.targetLevels,
+        originalText: cascadeData.originalText,
+        context: {
+          workflow: currentWorkflow,
+          phase: currentPhase,
+          existingSuggestions: suggestions,
+          specificEdits: specificEdits
         }
-      } else {
-        console.error('❌ Cascade generation failed:', cascadeResult.error);
+      });
+      
+      // Optional: observability
+      console.debug('[CascadeGenerate] meta', meta);
+      
+      // Notify parent component of new cascade edits
+      onCascadeEdit(data?.cascadeEdits, cascadeData.targetLevels);
+      
+      // Remove from pending queue
+      setPendingCascades(prev => 
+        prev.filter(p => p.timestamp !== cascadeData.timestamp)
+      );
+
+      if (debug) {
+        console.log('✅ Cascade edits generated:', data?.cascadeEdits);
       }
 
     } catch (error) {
@@ -240,38 +234,31 @@ export default function CascadeController({
         console.log('🔄 Performing recontextualization:', recontextData);
       }
 
-      const response = await fetch('/api/cascade-handler', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'recontextualize',
-          completedLevel: recontextData.completedLevel,
-          remainingText: recontextData.remainingText,
-          existingSuggestions: suggestions,
-          specificEdits: specificEdits,
-          context: {
-            workflow: currentWorkflow,
-            completedLevels: Array.from(completedLevels)
-          }
-        })
-      });
-
-      const recontextResult = await response.json();
-      
-      if (response.ok) {
-        // Notify parent component of recontextualized suggestions
-        onRecontextualize(recontextResult.updatedSuggestions);
-        
-        // Remove from recontextualization queue
-        setRecontextQueue(prev => 
-          prev.filter(r => r.timestamp !== recontextData.timestamp)
-        );
-
-        if (debug) {
-          console.log('✅ Recontextualization complete:', recontextResult);
+      const { data, meta } = await apiClient.post('/api/cascade-handler', {
+        action: 'recontextualize',
+        completedLevel: recontextData.completedLevel,
+        remainingText: recontextData.remainingText,
+        existingSuggestions: suggestions,
+        specificEdits: specificEdits,
+        context: {
+          workflow: currentWorkflow,
+          completedLevels: Array.from(completedLevels)
         }
-      } else {
-        console.error('❌ Recontextualization failed:', recontextResult.error);
+      });
+      
+      // Optional: observability
+      console.debug('[CascadeRecontextualize] meta', meta);
+      
+      // Notify parent component of recontextualized suggestions
+      onRecontextualize(recontextResult?.updatedSuggestions);
+      
+      // Remove from recontextualization queue
+      setRecontextQueue(prev => 
+        prev.filter(r => r.timestamp !== recontextData.timestamp)
+      );
+
+      if (debug) {
+        console.log('✅ Recontextualization complete:', recontextResult);
       }
 
     } catch (error) {

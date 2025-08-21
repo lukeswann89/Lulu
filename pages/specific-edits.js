@@ -1,5 +1,6 @@
 // pages/specific-edits.js
 import { useState, useMemo, useRef } from "react";
+import { apiClient } from "../utils/apiClient";
 import EditingWorkspace from "../containers/EditingWorkspace";
 import SpecificEditsPanel from "../components/SpecificEditsPanel";
 
@@ -35,16 +36,13 @@ export default function SpecificEditsPage() {
     setActiveType(EDIT_TYPES[0]);
     setActiveIdx(null);
     try {
-      const res = await fetch("/api/specific-edits", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: manuscript, editTypes, cascade })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Request failed.");
+      const { data, meta } = await apiClient.post("/api/specific-edits", { text: manuscript, editTypes, cascade });
+      
+      // Optional: observability
+      console.debug('[SpecificEdits] meta', meta);
       
       const suggestionsWithIds = {};
-      Object.keys(data.suggestions || {}).forEach(key => {
+      Object.keys(data?.suggestions || {}).forEach(key => {
         suggestionsWithIds[key] = data.suggestions[key].map((s, i) => ({
           ...s,
           id: `${key}_${i}_${Date.now()}`

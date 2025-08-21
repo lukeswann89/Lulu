@@ -2,6 +2,7 @@
 // DEEP DIVE HOOK: Ask Lulu functionality, deep dive content, chat logs
 
 import { useState } from 'react';
+import { apiClient } from '../utils/apiClient';
 
 export function useDeepDive({ text, logAction }) {
   // --- DEEP DIVE STATE ---
@@ -25,22 +26,20 @@ export function useDeepDive({ text, logAction }) {
         
         try {
           const manuscript = text;
-          const res = await fetch('/api/deep-dive', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              suggestion: sug.isWriter ? (sug.lulu || sug.own) : (sug.recommendation || sug.suggestion),
-              why: sug.why,
-              principles: sug.principles || [],
-              fullContext: sug.fullContext,
-              manuscript
-            })
+          const { data, meta } = await apiClient.post('/api/deep-dive', {
+            suggestion: sug.isWriter ? (sug.lulu || sug.own) : (sug.recommendation || sug.suggestion),
+            why: sug.why,
+            principles: sug.principles || [],
+            fullContext: sug.fullContext,
+            manuscript
           });
           
-          const data = await res.json();
+          // Optional: observability
+          console.debug('[DeepDive] meta', meta);
+          
           setDeepDiveContent(content => ({
             ...content, 
-            [sKey]: data.deepDive || "Mentor insight unavailable."
+            [sKey]: data?.deepDive || "Mentor insight unavailable."
           }));
           
         } catch (error) {
@@ -74,19 +73,17 @@ export function useDeepDive({ text, logAction }) {
     
     try {
       const manuscript = text;
-      const res = await fetch('/api/ask-lulu', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          suggestion: sug.isWriter ? (sug.lulu || sug.own) : (sug.recommendation),
-          why: sug.why,
-          manuscript,
-          question: contextText
-        })
+      const { data, meta } = await apiClient.post('/api/ask-lulu', {
+        suggestion: sug.isWriter ? (sug.lulu || sug.own) : (sug.recommendation),
+        why: sug.why,
+        manuscript,
+        question: contextText
       });
       
-      const data = await res.json();
-      const aiAnswer = data.answer || "Lulu: Mentor response unavailable.";
+      // Optional: observability
+      console.debug('[AskLulu] meta', meta);
+      
+      const aiAnswer = data?.answer || "Lulu: Mentor response unavailable.";
       
       setAskLuluLogs(logs => ({
         ...logs,

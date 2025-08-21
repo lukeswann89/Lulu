@@ -43,6 +43,7 @@ console.log('📦 [IMPORT] Plugin key type:', typeof coreSuggestionPluginKey);
 import { createDocFromText, docToText, findPositionOfText, mapGrammarMatchesToSuggestions } from "../utils/prosemirrorHelpers";
 import { ConflictGrouper } from '../utils/conflictGrouper';
 import { generateSuggestionId } from '../utils/suggestionIdGenerator';
+import { api } from '../utils/api'; // Import our new universal utility
 // UI & Helper Imports
 import { getEditMeta } from '../utils/editorConfig';
 import SpecificEditsPanel from '../components/SpecificEditsPanel';
@@ -202,6 +203,8 @@ function IndexV2() {
         };
     }, []);
 
+
+
     // Derived State (memoized for stability) (PROTECTED - UNCHANGED)
     const substantiveGoals = useMemo(() => {
         console.log('🔍 [DEBUG] Editorial plan structure:', editorialPlan);
@@ -322,6 +325,12 @@ function IndexV2() {
         const goalEditData = goalEdits[currentGoal.id];
         if (goalEditData.status === 'loaded' && goalEditData.edits && !goalEditData.positionsMapped) {
             console.log('🎯 [DEBUG] Adding position mapping to goal edits for:', currentGoal.id);
+
+            console.log('[COMPONENT TRACE] useEffect is running. State is:', {
+              goalEditData: goalEditData,
+              goalEditData_edits: goalEditData?.edits,
+              isArray: Array.isArray(goalEditData?.edits)
+            });
             
             const editsWithPositions = goalEditData.edits.map(edit => {
                 if (!edit.original) return edit;
@@ -405,15 +414,11 @@ function IndexV2() {
                 console.log('🔴 [RED LINE] Starting grammar check for text:', manuscriptText.substring(0, 50) + '...');
                 console.log('🔴 [RED LINE] Current activeSuggestions length:', activeSuggestions.length);
                 
-                const response = await fetch('/api/grammar-check', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: manuscriptText })
-                });
+                const { data, meta } = await api.post('/api/grammar-check', { text: manuscriptText });
+                const { results } = data;
                 
-                if (!response.ok) throw new Error(`Grammar check failed: ${response.status}`);
-                
-                const { results } = await response.json();
+                // Optional: observability
+                console.debug('[GrammarCheck] meta', meta);
                 console.log('🔴 [RED LINE] Grammar check results:', results);
                 
                 // ✅ CLEAN REFACTORED CALL: Use proven utility function
@@ -679,14 +684,11 @@ function IndexV2() {
         setIsFocusEditActive(true);
         setIsFocusEditProcessing(true);
         try {
-            const response = await fetch('/api/focus-edit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: manuscriptText }),
-            });
-            if (!response.ok) throw new Error(`Focus Edit API request failed: ${response.status}`);
-            const apiResult = await response.json();
-            const fetched = apiResult?.suggestions || [];
+            const { data, meta } = await api.post('/api/focus-edit', { text: manuscriptText });
+            const fetched = data?.suggestions || [];
+            
+            // Optional: observability
+            console.debug('[FocusEdit] meta', meta);
 
             // Map positions and canonical IDs exactly like sentence-level flow
             const positioned = (fetched || []).map(s => {

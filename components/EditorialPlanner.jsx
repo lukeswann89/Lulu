@@ -59,9 +59,44 @@ export default function EditorialPlanner({
     };
 
     // Handle executing the approved plan with filtered goals
-    const handleExecuteApprovedPlan = () => {
+    const handleExecuteApprovedPlan = async () => {
         const filteredGoals = editorialPlan.filter(goal => selectedGoals[goal.id]);
+        
+        // Execute the workflow plan
         actions.executeApprovedPlan('pro', filteredGoals);
+        
+        // NEW: Fetch Deep Dive specific edits for the selected strategy cards
+        if (filteredGoals.length > 0) {
+            // Extract strategy card IDs from the selected goals
+            const strategyCardIds = filteredGoals.map(goal => String(goal.id));
+            
+            // INSTRUMENTATION: Log the Deep Dive request details
+            console.log('[DeepDive] phase', 'assessment');
+            console.log('[DeepDive] selectedCards', strategyCardIds);
+            console.log('[DeepDive] request body', {
+                strategyCardIds,
+                textLength: manuscriptText?.length || 0,
+                intent: 'sentence_edits'
+            });
+            
+            try {
+                const suggestions = await actions.fetchDeepDiveEdits(strategyCardIds, manuscriptText);
+                
+                // INSTRUMENTATION: Log the response details
+                console.log('[DeepDive] raw response suggestions', suggestions);
+                console.log('[DeepDive] suggestions path check', {
+                    atRoot: Array.isArray(suggestions),
+                    count: suggestions?.length || 0,
+                    first: suggestions?.[0]
+                });
+                
+                // TODO: These suggestions should be passed to the parent component
+                // to be displayed in the editor. For now, we'll just log them.
+                // In the full implementation, this would update the global suggestion state.
+            } catch (error) {
+                console.error('[DeepDive] Error executing plan:', error);
+            }
+        }
     };
 
     // Handler calls the action from props (no direct hook usage)

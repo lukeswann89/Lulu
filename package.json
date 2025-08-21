@@ -2,10 +2,10 @@
   "name": "lulu-mvp-clean",
   "version": "1.0.0",
   "scripts": {
-  "dev": "cross-env NODE_OPTIONS='--inspect' next dev",
-  "build": "next build",
-  "start": "next start"
-},
+    "dev": "cross-env NODE_OPTIONS='--inspect' next dev",
+    "build": "next build",
+    "start": "next start"
+  },
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",
     "@chakra-ui/react": "^3.19.1",
@@ -43,7 +43,8 @@
     "slate-history": "^0.113.1",
     "slate-react": "^0.114.2",
     "tailwindcss": "^3.3.2",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "zod": "^3.25.76"
   },
   "description": "echo \"Lulu is live 🚀\" >> README.md\r git add README.md\r git commit -m \"Trigger rebuild on Vercel\"\r git push",
   "main": "check-env.js",
