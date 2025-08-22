@@ -13,13 +13,11 @@ export const initialState = {
   editorialPlan: null,
   currentGoalIndex: null,
   goalEdits: {},
-  isFetchingEdits: false, 
+  isFetchingEdits: false,
 };
 
 export function workflowReducer(state, action) {
   switch (action.type) {
-    // ... all of your other cases from PREPARE_PLAN_START to FETCH_GOAL_EDITS_FAILURE remain the same ...
-    
     case 'PREPARE_PLAN_START': {
       return { ...state, isProcessing: true, error: null, editorialPlan: null };
     }
@@ -61,15 +59,21 @@ export function workflowReducer(state, action) {
           [action.payload.goalId]: { status: 'loading', edits: [] },
         }
       };
-    case 'FETCH_GOAL_EDITS_SUCCESS':
+      
+    // INTEGRATED CHANGE: This case now includes the data normalization logic.
+    case 'FETCH_GOAL_EDITS_SUCCESS': {
+      const rawEdits = action.payload.edits;
+      const editsArray = Array.isArray(rawEdits) ? rawEdits : [];
       return {
         ...state,
         isFetchingEdits: false,
         goalEdits: {
           ...state.goalEdits,
-          [action.payload.goalId]: { status: 'loaded', edits: action.payload.edits },
+          [action.payload.goalId]: { status: 'loaded', edits: editsArray },
         }
       };
+    }
+
     case 'FETCH_GOAL_EDITS_FAILURE':
        return {
         ...state,
@@ -80,17 +84,17 @@ export function workflowReducer(state, action) {
         }
       };
     
-    // FIX: This new logic correctly distributes the fetched edits to ALL selected goals.
+    // INTEGRATED CHANGE: This case now includes the data normalization logic.
     case 'FETCH_DEEP_DIVE_SUCCESS': {
       const newGoalEdits = { ...state.goalEdits };
-      const allSuggestions = action.payload.suggestions;
+      const allSuggestions = Array.isArray(action.payload.suggestions)
+        ? action.payload.suggestions
+        : [];
 
-      // Find the goals that were just requested
       const requestedGoalIds = (state.editorialPlan || [])
-        .filter(goal => goal.isSelected !== false) // Assuming default is selected
-        .map(goal => goal.id);
+        .filter(goal => goal.isSelected !== false)
+        .map(goal => String(goal.id)); // Ensure IDs are strings for consistency
 
-      // Assign the entire batch of suggestions to each requested goal's edit list
       requestedGoalIds.forEach(goalId => {
         newGoalEdits[goalId] = {
           status: 'loaded',
@@ -106,12 +110,13 @@ export function workflowReducer(state, action) {
       };
     }
 
-    case 'FETCH_DEEP_DIVE_FAILURE':
+    case 'FETCH_DEEP_DIVE_FAILURE': {
       return {
         ...state,
         isProcessing: false,
         error: 'Failed to fetch specific edits.',
       };
+    }
     
     case 'ADVANCE_GOAL': {
       if (state.currentGoalIndex === null) return state;
