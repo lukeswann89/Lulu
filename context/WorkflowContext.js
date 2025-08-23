@@ -84,7 +84,15 @@ export function workflowReducer(state, action) {
           ['developmental', 'structural'].includes(goal.type.toLowerCase())
       );
       if (nextIndex >= substantiveGoals.length) {
-        return { ...state, currentGoalIndex: null };
+        // FIX: When finishing final substantive goal, progress to next phase instead of just resetting
+        const completedPhases = new Set(state.completedPhases).add(state.currentPhase);
+        const currentIndex = state.workflowPhases.indexOf(state.currentPhase);
+        const currentWorkflowPhases = WORKFLOWS[state.currentWorkflow].phases;
+        if (currentIndex >= currentWorkflowPhases.length - 1) {
+          return { ...state, currentPhase: 'complete', completedPhases, isProcessing: false, currentGoalIndex: null };
+        }
+        const nextPhase = currentWorkflowPhases[currentIndex + 1];
+        return { ...state, currentPhase: nextPhase, completedPhases, isProcessing: false, currentGoalIndex: null };
       }
       return { ...state, currentGoalIndex: nextIndex };
     }
