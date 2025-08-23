@@ -226,10 +226,11 @@ function IndexV2() {
         [substantiveGoals, currentGoalIndex]
     );
 
-    // Effect for State Cleanup on Phase Change (UPDATED for Unified Suggestion State)
+    // Effect for State Cleanup on Phase Change (UPDATED for Separate Suggestion States)
     useEffect(() => {
         if (currentPhase === 'assessment') {
-            setActiveSuggestions([]);
+            setSubstantiveSuggestions([]);
+            setGrammarSuggestions([]);
         }
         // Clear fetch tracking when phase changes
         sentenceLevelFetchedRef.current.clear();
