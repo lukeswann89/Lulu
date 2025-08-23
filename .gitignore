@@ -38,3 +38,7 @@ CursorUserSetup*
 
 # Ignore node modules
 /node_modules*.zip
+
+# Local heavy data
+/data-local/
+ngrams-en-20150817.zip
