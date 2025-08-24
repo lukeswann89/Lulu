@@ -503,7 +503,13 @@ function IndexV2() {
     }, [manuscriptText, isGrammarChecking, currentPhase, isFocusEditActive, grammarSuggestions.length]); // Updated dependencies
 
     // Action Handlers (UPDATED: Using Separate Suggestion States with Position Remapping)
-    const handleGoalComplete = useCallback(() => { actions.advanceToNextGoal(); }, [actions]);
+    const handleGoalComplete = useCallback(() => {
+        if (nextGoal) {
+            actions.advanceToNextGoal();
+        } else {
+            actions.completeCurrentPhase();
+        }
+    }, [actions, nextGoal]);
 
     const handleAcceptChoice = useCallback((suggestionId) => {
         if (!viewRef.current) return;
@@ -763,7 +769,7 @@ function IndexV2() {
             }).filter(Boolean);
 
             const grouped = ConflictGrouper.groupOverlaps(positioned);
-            setActiveSuggestions(grouped);
+            setSubstantiveSuggestions(grouped);
         } catch (err) {
             console.error('Focus Edit request failed:', err);
         } finally {
