@@ -42,7 +42,6 @@ console.log('📦 [IMPORT] coreSuggestionPluginKey:', coreSuggestionPluginKey);
 console.log('📦 [IMPORT] Plugin key type:', typeof coreSuggestionPluginKey);
 import { createDocFromText, docToText, findPositionOfText, mapGrammarMatchesToSuggestions } from "../utils/prosemirrorHelpers";
 import { ConflictGrouper } from '../utils/conflictGrouper';
-import { ConflictResolver } from '../utils/conflictResolver';
 import { generateSuggestionId } from '../utils/suggestionIdGenerator';
 // UI & Helper Imports
 import { getEditMeta } from '../utils/editorConfig';
@@ -82,7 +81,8 @@ import MentorWing from '../components/layout/MentorWing';
  * - All existing component integrations and prop passing
  */
 
-const SUBSTANTIVE_PHASES = ['developmental', 'structural'];
+const SUBSTANTIVE_PHASES = ["substantive", "developmental", "structural"];
+const GRAMMAR_HOTFIX_STRICT = process.env.NEXT_PUBLIC_LULU_GRAMMAR_HOTFIX_STRICT === "1";
 const SENTENCE_LEVEL_PHASES = ['line', 'copy', 'proof'];
 
 function IndexV2() {
@@ -384,6 +384,11 @@ function IndexV2() {
     // TASK 4: Single Synchronization Point - Unified Suggestion State with ProseMirror
     useEffect(() => {
         console.log('⚡ [UNIFIED] ProseMirror sync effect triggered, activeSuggestions:', activeSuggestions);
+        
+        // DIAGNOSTIC: Log what React is about to send to plugin
+        console.log('⚡ [DIAGNOSTIC] About to override plugin with React state:', 
+                   activeSuggestions.slice(0,2).map(s => `${s.id}:${s.from}-${s.to}`));
+        
         if (!viewRef.current) {
             console.log('⚡ [UNIFIED] No viewRef.current, skipping ProseMirror sync');
             return;
@@ -407,75 +412,63 @@ function IndexV2() {
     useEffect(() => {
         const checkGrammar = async () => {
             if (!manuscriptText.trim() || isGrammarChecking) return;
-            
-            // MUTE GRAMMAR CHECKS DURING FOCUSED WORK: Respect the calm workspace principle
-            if (SUBSTANTIVE_PHASES.includes(currentPhase) || isFocusEditActive) {
-                console.log('🔴 [RED LINE] Grammar check muted during focused work phase:', currentPhase, 'Focus Edit active:', isFocusEditActive);
+
+            // --- DEBUG LOG: Always log before mute condition ---
+            console.log("🔴 [RED LINE CHECK] Phase:", currentPhase, "Focus Edit:", isFocusEditActive, "HotfixStrict:", GRAMMAR_HOTFIX_STRICT);
+
+            // --- HOTFIX STRICT: Only allow grammar in assessment phase ---
+            if (GRAMMAR_HOTFIX_STRICT && currentPhase !== "assessment") {
+                console.log("🔴 [RED LINE] Muted (hotfix strict). No fetch; clearing handled by watcher.");
                 return;
             }
-            
+
+            // --- CLEAN MUTE: Deep Dive or Focus Edit ---
+            if (SUBSTANTIVE_PHASES.includes(currentPhase) || isFocusEditActive) {
+                console.log("🔴 [RED LINE] Muted (deep dive / focus). No fetch; clearing handled by watcher.");
+                return;
+            }
+
+            // --- DEBUG LOG: Proceeding ---
+            console.log("🔴 [RED LINE] Running grammar check…");
+
             setIsGrammarChecking(true);
             try {
-                console.log('🔴 [RED LINE] Starting grammar check for text:', manuscriptText.substring(0, 50) + '...');
-                console.log('🔴 [RED LINE] Current grammarSuggestions length:', grammarSuggestions.length);
-                
                 const response = await fetch('/api/grammar-check', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: manuscriptText })
                 });
-                
+
                 if (!response.ok) throw new Error(`Grammar check failed: ${response.status}`);
-                
+
                 const { results } = await response.json();
-                console.log('🔴 [RED LINE] Grammar check results:', results);
-                
-                // ✅ CLEAN REFACTORED CALL: Use proven utility function
+
                 if (!viewRef.current) {
                     console.warn('🔴 [RED LINE] No editor view available');
                     return;
                 }
 
                 const newGrammarSuggestions = mapGrammarMatchesToSuggestions(results, viewRef.current.state.doc);
-                
-                console.log('🔴 [RED LINE] Transformed suggestions:', newGrammarSuggestions);
-                console.log('🔴 [RED LINE] First suggestion details:', newGrammarSuggestions[0]);
-                
-                // SEPARATE SUGGESTION STATE: Smart grammar suggestion diffing
+
                 setGrammarSuggestions(prevGrammarSuggestions => {
                     // Compare new suggestions with existing ones
                     const suggestionsToKeep = prevGrammarSuggestions.filter(existing => {
-                        // Keep existing suggestion if it still matches the new results
-                        return newGrammarSuggestions.some(newSug => 
-                            newSug.from === existing.from && 
+                        return newGrammarSuggestions.some(newSug =>
+                            newSug.from === existing.from &&
                             newSug.to === existing.to &&
                             newSug.original === existing.original
                         );
                     });
-                    
                     const suggestionsToAdd = newGrammarSuggestions.filter(newSug => {
-                        // Add new suggestion if it doesn't already exist
                         return !prevGrammarSuggestions.some(existing =>
-                            existing.from === newSug.from && 
+                            existing.from === newSug.from &&
                             existing.to === newSug.to &&
                             existing.original === newSug.original
                         );
                     });
-                    
-                    const finalGrammarSuggestions = [...suggestionsToKeep, ...suggestionsToAdd];
-                    
-                    console.log('🔴 [RED LINE] Smart diff results:');
-                    console.log('🔴 [RED LINE] - Existing grammar suggestions:', prevGrammarSuggestions.length);
-                    console.log('🔴 [RED LINE] - Suggestions to keep:', suggestionsToKeep.length);
-                    console.log('🔴 [RED LINE] - New suggestions to add:', suggestionsToAdd.length);
-                    console.log('🔴 [RED LINE] - Final grammar suggestion count:', finalGrammarSuggestions.length);
-                    
-                    return finalGrammarSuggestions;
+                    return [...suggestionsToKeep, ...suggestionsToAdd];
                 });
-                
-                // Update the last grammar check text
                 lastGrammarCheckTextRef.current = manuscriptText;
-                
             } catch (error) {
                 console.error('🔴 [RED LINE] Grammar check error:', error);
             } finally {
@@ -486,37 +479,60 @@ function IndexV2() {
         // Smart suggestion management - only check if significant text change
         const textChanged = lastGrammarCheckTextRef.current !== manuscriptText;
         const hasGrammarSuggestions = grammarSuggestions.length > 0;
-        
-        // Skip if text unchanged and we have recent suggestions
+
         if (hasGrammarSuggestions && !textChanged) {
             console.log('🔴 [RED LINE] Skipping grammar check - text unchanged and passive suggestions exist');
             return;
         }
-        
+
         // For text changes, we'll do smart diffing after getting new results
         // No aggressive clearing here - let the results determine what to update
-        console.log('🔴 [RED LINE] Text changed, will update suggestions intelligently');
-
         // Debounce grammar checking - wait 2 seconds after text changes
         const timeoutId = setTimeout(checkGrammar, 2000);
         return () => clearTimeout(timeoutId);
-    }, [manuscriptText, isGrammarChecking, currentPhase, isFocusEditActive, grammarSuggestions.length]); // Updated dependencies
+    }, [manuscriptText, isGrammarChecking, currentPhase, isFocusEditActive]);
+
+    // NEW: Mute watcher effect to clear grammar suggestions when entering muted context
+    useEffect(() => {
+        const inDeepDive = SUBSTANTIVE_PHASES.includes(currentPhase);
+        const shouldMuteClean = inDeepDive || isFocusEditActive;
+        const shouldMuteHotfix = GRAMMAR_HOTFIX_STRICT && currentPhase !== "assessment";
+        const shouldMute = shouldMuteHotfix || shouldMuteClean;
+
+        if (shouldMute && grammarSuggestions.length > 0) {
+            console.log("🔴 [RED LINE] Mute watcher: clearing existing grammar suggestions.");
+            setGrammarSuggestions([]);
+        }
+    }, [currentPhase, isFocusEditActive, GRAMMAR_HOTFIX_STRICT, grammarSuggestions.length]);
 
     // Action Handlers (UPDATED: Using Separate Suggestion States with Position Remapping)
     const handleGoalComplete = useCallback(() => {
+        // DEEP DIVE COMPLETION: Pass remaining suggestions to check if phase can complete
+        const allRemainingSuggestions = [...substantiveSuggestions, ...grammarSuggestions];
+        
         if (nextGoal) {
             actions.advanceToNextGoal();
         } else {
-            actions.completeCurrentPhase();
+            const phaseCompleted = actions.completeCurrentPhase(allRemainingSuggestions);
+            if (!phaseCompleted) {
+                // Show user feedback that edits must be completed first
+                console.log('📝 [USER FEEDBACK] Please complete all remaining edits before finishing this phase');
+                // Could add toast notification here
+            }
         }
-    }, [actions, nextGoal]);
+    }, [actions, nextGoal, substantiveSuggestions, grammarSuggestions]);
 
     const handleAcceptChoice = useCallback((suggestionId) => {
         if (!viewRef.current) return;
         
+        console.log(`🔧 [MAIN] handleAcceptChoice: ${suggestionId}`);
+        
         // GUARD: Check if suggestion still exists in plugin state (prevents double-processing)
         const currentPluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
-        if (!currentPluginState) return;
+        if (!currentPluginState) {
+            console.warn('⚠️ [MAIN] No plugin state available');
+            return;
+        }
         
         // Check if suggestion exists (handles both direct suggestions and conflict groups)
         const suggestionExists = currentPluginState.suggestions.some(s => {
@@ -527,7 +543,7 @@ function IndexV2() {
         });
         
         if (!suggestionExists) {
-            // Suggestion already processed - ignore duplicate request
+            console.warn(`⚠️ [MAIN] Suggestion ${suggestionId} not found - already processed`);
             return;
         }
         
@@ -539,56 +555,29 @@ function IndexV2() {
         setPopoverTarget(null);
         setActivePopoverSuggestion(null);
         
-        // Process the suggestion
-        pmAcceptSuggestion(viewRef.current, suggestionId);
-        
-        // POSITION REMAPPING: Handle cascade effects after acceptance
-        const acceptedSuggestion = currentPluginState.suggestions.find(s => {
-            if (s.isConflictGroup) {
-                return s.suggestions.some(child => child.id === suggestionId);
-            }
-            return s.id === suggestionId;
-        });
-        
-        if (acceptedSuggestion) {
-            const conflictResolver = new ConflictResolver();
-            const remainingSuggestions = activeSuggestions.filter(s => s.id !== suggestionId);
-            const cascadeEffects = conflictResolver.handleCascadeEffects(acceptedSuggestion, remainingSuggestions);
+        try {
+            // Process the suggestion through plugin (canonical position mapping)
+            pmAcceptSuggestion(viewRef.current, suggestionId);
+            console.log(`✅ [MAIN] Successfully processed suggestion ${suggestionId} through plugin`);
             
-            // Update separate suggestion states with remapped positions
-            const updatedSubstantive = substantiveSuggestions
-                .filter(s => s.id !== suggestionId)
-                .filter(s => !cascadeEffects.invalidated.some(inv => inv.id === s.id))
-                .map(s => {
-                    const update = cascadeEffects.positionUpdates.find(u => u.id === s.id);
-                    return update ? { ...s, ...update } : s;
-                });
-                
-            const updatedGrammar = grammarSuggestions
-                .filter(s => s.id !== suggestionId)
-                .filter(s => !cascadeEffects.invalidated.some(inv => inv.id === s.id))
-                .map(s => {
-                    const update = cascadeEffects.positionUpdates.find(u => u.id === s.id);
-                    return update ? { ...s, ...update } : s;
-                });
-                
-            setSubstantiveSuggestions(updatedSubstantive);
-            setGrammarSuggestions(updatedGrammar);
-        } else {
-            // Fallback: Update separate states from plugin state
-            const newPluginState = coreSuggestionPluginKey.getState(viewRef.current.state);
-            const newSuggestions = newPluginState ? newPluginState.suggestions : [];
+            // DIAGNOSTIC: Check plugin state immediately after acceptance
+            setTimeout(() => {
+                const postAcceptState = coreSuggestionPluginKey.getState(viewRef.current.state);
+                console.log('🔍 [DIAGNOSTIC] Plugin state 100ms after acceptance:', 
+                           postAcceptState?.suggestions?.slice(0,2).map(s => `${s.id}:${s.from}-${s.to}`));
+            }, 100);
             
-            // Separate suggestions by type
-            const newSubstantive = newSuggestions.filter(s => s.type !== 'passive');
-            const newGrammar = newSuggestions.filter(s => s.type === 'passive');
+            // Remove accepted suggestion from React state arrays immediately
+            // Plugin handles position remapping automatically via tr.mapping
+            setSubstantiveSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+            setGrammarSuggestions(prev => prev.filter(s => s.id !== suggestionId));
             
-            setSubstantiveSuggestions(newSubstantive);
-            setGrammarSuggestions(newGrammar);
+            setActiveConflictGroup(null);
+        } catch (error) {
+            console.error(`🚨 [MAIN] Error accepting suggestion ${suggestionId}:`, error);
+            // Optionally show user feedback about the error
         }
-        
-        setActiveConflictGroup(null);
-    }, [substantiveSuggestions, grammarSuggestions]);
+    }, [pmAcceptSuggestion]);
 
     // Soft reject: remove suggestion from plugin and separate suggestion states without applying
     const handleRejectChoice = useCallback((suggestionId) => {
@@ -742,6 +731,7 @@ function IndexV2() {
         if (!viewRef.current) return;
         setIsFocusEditActive(true);
         setIsFocusEditProcessing(true);
+        setGrammarSuggestions([]); // 🔴 clear red lines immediately
         try {
             const response = await fetch('/api/focus-edit', {
                 method: 'POST',
@@ -788,6 +778,7 @@ function IndexV2() {
     const handleResetFocusEdit = useCallback(() => {
         setIsFocusEditActive(false);
         setIsFocusEditProcessing(false);
+        setGrammarSuggestions([]); // 🔴 clear any lingering red lines on exit
         // Do not clear activeSuggestions here; caller controls when to clear
     }, []);
 

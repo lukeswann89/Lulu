@@ -143,7 +143,32 @@ export function useWorkflowActions() {
   }, [dispatch]);
   
   const advanceToNextGoal = useCallback(() => { dispatch({ type: 'ADVANCE_GOAL' }); }, [dispatch]);
-  const completeCurrentPhase = useCallback(() => { dispatch({ type: 'COMPLETE_AND_ADVANCE_PHASE' }); }, [dispatch]);
+  
+  // DEEP DIVE COMPLETION: Modified to check remaining suggestions for substantive phases
+  const completeCurrentPhase = useCallback((remainingSuggestions = []) => { 
+    const currentPhase = workflowStateRef.current.currentPhase;
+    const substantivePhases = ['developmental', 'structural', 'line'];
+    
+    // For substantive phases, check if all specific edits are complete
+    if (substantivePhases.includes(currentPhase)) {
+      const phaseSpecificSuggestions = remainingSuggestions.filter(s => {
+        const editType = s.editType?.toLowerCase();
+        return editType === currentPhase || 
+               (currentPhase === 'line' && ['line', 'substantive'].includes(editType));
+      });
+      
+      if (phaseSpecificSuggestions.length > 0) {
+        console.log(`🚫 [DEEP DIVE] Cannot complete ${currentPhase} phase - ${phaseSpecificSuggestions.length} edits remaining`);
+        return false; // Phase not completed
+      }
+      
+      console.log(`✅ [DEEP DIVE] ${currentPhase} phase complete - all specific edits done`);
+    }
+    
+    dispatch({ type: 'COMPLETE_AND_ADVANCE_PHASE' }); 
+    return true; // Phase completed
+  }, [dispatch]);
+  
   const resetWorkflow = useCallback(() => { dispatch({ type: 'RESET_WORKFLOW' }); }, [dispatch]);
 
   return {
