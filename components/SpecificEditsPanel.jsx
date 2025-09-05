@@ -171,17 +171,20 @@ export default function SpecificEditsPanel({
 
     return (
       <div className="space-y-3">
-        {suggestions.map((suggestion, index) => (
-          <SpecificEditCard
-            key={suggestion.id || index}
-            edit={suggestion}
-            index={index}
-            onAccept={onAccept}
-            onReject={onReject}
-            onRevise={onRevise}
-            getEditMeta={getEditMeta}
-          />
-        ))}
+        {/* Guard clause: Only render SpecificEditCard when suggestions are loaded */}
+        {suggestions && suggestions.length > 0 &&
+          suggestions.map((suggestion, index) => (
+            <SpecificEditCard
+              key={suggestion.id || index}
+              edit={suggestion}
+              index={index}
+              onAccept={onAccept}
+              onReject={onReject}
+              onRevise={onRevise}
+              getEditMeta={getEditMeta}
+            />
+          ))
+        }
       </div>
     );
   }

@@ -112,13 +112,7 @@ export default function PolishStudio({
     setTimeout(() => {
       focusNext();
     }, 200);
-    // DIAGNOSTIC: compute remaining list locally for transition check
-    const newSuggestionList = flatSorted.filter(s => s.id !== targetId);
-    console.log('🔍 [DIAGNOSTIC] Suggestion actioned. Remaining suggestions:', newSuggestionList.length);
-    if (newSuggestionList.length === 0) {
-      console.log('🔍 [DIAGNOSTIC] Transitioning phase from review to report...');
-      setPhase('report');
-    }
+    // REMOVED: Local phase transition logic - let the useEffect handle this based on parent state
   }, [activeSuggestionId, onAccept, focusNext]);
 
   const handleReject = useCallback((id) => {
@@ -132,13 +126,7 @@ export default function PolishStudio({
     setTimeout(() => {
       focusNext();
     }, 120);
-    // DIAGNOSTIC: compute remaining list locally for transition check
-    const newSuggestionList = flatSorted.filter(s => s.id !== targetId);
-    console.log('🔍 [DIAGNOSTIC] Suggestion actioned. Remaining suggestions:', newSuggestionList.length);
-    if (newSuggestionList.length === 0) {
-      console.log('🔍 [DIAGNOSTIC] Transitioning phase from review to report...');
-      setPhase('report');
-    }
+    // REMOVED: Local phase transition logic - let the useEffect handle this based on parent state
   }, [activeSuggestionId, onReject, focusNext, flatSorted]);
 
   // Keyboard navigation (N/P/A/R). Ignore when typing in inputs/textareas.

@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.suggestion-highlight.passive {
+  text-decoration: underline;
+  text-decoration-color: red;
+  text-decoration-thickness: 1.5px;
+  text-decoration-style: wavy;
+  background-color: rgba(255, 0, 0, 0.05);
+}

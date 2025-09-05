@@ -54,6 +54,8 @@ export default async function handler(req, res) {
   
       // Parse JSON response from LanguageTool
       const data = await response.json();
+    // [AUDIT-VOICE] Raw API Response:
+    console.log('[AUDIT-VOICE] Raw API Response:', JSON.stringify(data));
   
       // Extract matches array, defaulting to empty array if not present
       const matches = data.matches || [];

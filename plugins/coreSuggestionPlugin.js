@@ -58,6 +58,8 @@ class PositionMapper {
     static batchMapPositions(doc, suggestions) {
         return suggestions.map(suggestion => {
             const validation = this.validateCharacterRange(doc, suggestion.start, suggestion.end);
+                // [AUDIT-WILL] Plugin Received Suggestions:
+                console.log('[AUDIT-WILL] Plugin Received Suggestions:', JSON.stringify(suggestion));
             return {
                 ...suggestion,
                 proseMirrorStart: validation.startPos,

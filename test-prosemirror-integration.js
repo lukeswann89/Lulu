@@ -164,7 +164,7 @@ useEffect(() => {
     const sampleText = "The door slowly opened with a creak, and they entered. He reminded Sylvia of Virginia at times, lost in his own world. The sting of the words – locked in – settled on Sylvia inside their granddad's room, her shoulders sunken. \"Your granddaughters are here to see you, Paul,\" Mrs Jenkins said from the door, startling Sylvia. I thought she'd already left.";
     
     console.log("📝 Setting sample text in editor...");
-    const doc = createDocFromText(luluSchema, sampleText);
+    const doc = createDocFromText(sampleText, luluSchema);
     const tr = viewRef.current.state.tr;
     tr.replaceWith(0, viewRef.current.state.doc.content.size, doc);
     viewRef.current.dispatch(tr);
@@ -178,7 +178,7 @@ useEffect(() => {
     const sampleText = "The door slowly opened with a creak, and they entered. He reminded Sylvia of Virginia at times, lost in his own world. The sting of the words – locked in – settled on Sylvia inside their granddad's room, her shoulders sunken. \"Your granddaughters are here to see you, Paul,\" Mrs Jenkins said from the door, startling Sylvia. I thought she'd already left.";
     
     console.log("📝 Setting sample text in editor...");
-    const doc = createDocFromText(luluSchema, sampleText);
+    const doc = createDocFromText(sampleText, luluSchema);
     const tr = viewRef.current.state.tr;
     tr.replaceWith(0, viewRef.current.state.doc.content.size, doc);
     viewRef.current.dispatch(tr);

@@ -88,7 +88,7 @@ const ProseMirrorIntegration = forwardRef(({
       };
 
       // Create initial document
-      const doc = createDocFromText(luluSchema, value || "");
+      const doc = createDocFromText(value || "", luluSchema);
       lastContentRef.current = value || "";
       initialContentSet.current = true;
       
@@ -165,7 +165,7 @@ const ProseMirrorIntegration = forwardRef(({
       }
       
       const { state } = viewRef.current;
-      const newDoc = createDocFromText(luluSchema, value);
+      const newDoc = createDocFromText(value, luluSchema);
       const tr = state.tr.replaceWith(0, state.doc.content.size, newDoc.content);
       
       viewRef.current.dispatch(tr);
@@ -195,7 +195,7 @@ const ProseMirrorIntegration = forwardRef(({
     getContent: () => viewRef.current ? docToText(viewRef.current.state.doc) : "",
     setContent: (content) => {
       if (viewRef.current) {
-        const newDoc = createDocFromText(luluSchema, content);
+        const newDoc = createDocFromText(content, luluSchema);
         const newState = EditorState.create({
           doc: newDoc,
           plugins: viewRef.current.state.plugins

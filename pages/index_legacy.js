@@ -104,7 +104,7 @@ export default function Home() {
     };
 
     // Create initial document from current text
-    const doc = createDocFromText(luluSchema, text || "");
+    const doc = createDocFromText(text || "", luluSchema);
 
     const state = EditorState.create({
       doc,
@@ -210,7 +210,7 @@ useEffect(() => {
     const currentDocText = docToText(viewRef.current.state.doc);
     if (currentDocText !== text) {
       // Update ProseMirror document to match text state
-      const newDoc = createDocFromText(luluSchema, text);
+      const newDoc = createDocFromText(text, luluSchema);
       const newState = EditorState.create({
         doc: newDoc,
         plugins: viewRef.current.state.plugins
