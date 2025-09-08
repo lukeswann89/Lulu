@@ -18,7 +18,7 @@ export function createLuluEditorState(initialText, options) {
   }).plugin;
 
   return EditorState.create({
-    doc: createDocFromText(luluSchema, initialText),
+    doc: createDocFromText(initialText, luluSchema),
     plugins: [suggestionPlugin],
   });
 }

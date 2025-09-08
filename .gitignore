@@ -38,3 +38,4 @@ CursorUserSetup*
 
 # Ignore node modules
 /node_modules*.zip
+data-local/

@@ -37,7 +37,7 @@ function PMTestPage() {
     const startingText =
       "Looking down at the churning sea below, she stood at the edge as the wind was blowing very hard through her hair.";
 
-    const doc = createDocFromText(luluSchema, startingText);
+    const doc = createDocFromText(startingText, luluSchema);
 
     const state = EditorState.create({
       doc,

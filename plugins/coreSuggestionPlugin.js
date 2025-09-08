@@ -58,6 +58,8 @@ class PositionMapper {
     static batchMapPositions(doc, suggestions) {
         return suggestions.map(suggestion => {
             const validation = this.validateCharacterRange(doc, suggestion.start, suggestion.end);
+                // [AUDIT-WILL] Plugin Received Suggestions:
+                console.log('[AUDIT-WILL] Plugin Received Suggestions:', JSON.stringify(suggestion));
             return {
                 ...suggestion,
                 proseMirrorStart: validation.startPos,
@@ -164,26 +166,28 @@ class CoreSuggestionState {
     }
 
     apply(tr) {
-        // Standard mapping of positions through transactions
-        let suggestions = this.suggestions.map(s => ({
-            ...s,
-            from: tr.mapping.map(s.from),
-            to: tr.mapping.map(s.to),
-        }));
-        let decorations = this.decorations.map(tr.mapping, tr.doc);
-        let activeConflict = this.activeConflict;
+        // Document state validation - catch corruption early
+        if (!tr.doc || typeof tr.doc.nodeSize !== 'number') {
+            console.error('🚨 [PLUGIN] Document corruption detected - invalid doc state');
+            return new CoreSuggestionState(DecorationSet.empty, [], null, this.metadata);
+        }
 
         const action = tr.getMeta(coreSuggestionPluginKey);
+        let suggestions = [...this.suggestions];
+        let decorations = this.decorations;
+        let activeConflict = this.activeConflict;
 
+        // Handle plugin actions first (before position mapping)
         if (action) {
             switch (action.type) {
                 case 'setSuggestions':
+                    // setSuggestions provides fresh data with correct positions
                     const result = this.handleSetSuggestions(action, tr.doc);
                     decorations = result.decorations;
                     suggestions = result.suggestions;
-                    break;
+                    // setSuggestions provides fresh positions - return immediately to avoid double mapping
+                    return new CoreSuggestionState(decorations, suggestions, activeConflict, this.metadata);
 
-                // LULU'S CONSCIENCE: New action to handle showing the conflict UI
                 case 'showConflict':
                     activeConflict = suggestions.find(s => s.id === action.groupId);
                     console.log(`💡 Conscience: User is examining conflict group ${action.groupId}.`);
@@ -194,24 +198,47 @@ class CoreSuggestionState {
                     break;
 
                 case 'acceptSuggestion':
-                    const acceptResult = this.handleAcceptSuggestion(action, decorations, suggestions);
+                    const acceptResult = this.handleAcceptSuggestion(action, decorations, suggestions, tr);
                     decorations = acceptResult.decorations;
                     suggestions = acceptResult.suggestions;
-                    activeConflict = null; // Always hide conflict UI after a choice is made
+                    activeConflict = null;
+                    // Don't return early - let position mapping execute for remaining suggestions
                     break;
 
                 case 'clearAll':
                     decorations = DecorationSet.empty;
                     suggestions = [];
                     activeConflict = null;
-                    break;
+                    // No suggestions to map - return immediately
+                    return new CoreSuggestionState(decorations, suggestions, activeConflict, this.metadata);
             }
         }
-        
-        // If the document changed, we must re-validate and potentially regroup suggestions
-        if (tr.docChanged) {
-             // This is a complex step for a future iteration. For now, we rely on the `acceptSuggestion` flow
-             // which clears all other suggestions to maintain integrity.
+
+        // Only map positions if document changed AND no action handled suggestions
+        if (tr.docChanged && suggestions.length > 0) {
+            try {
+                // Validate and map positions with bounds checking
+                suggestions = suggestions.map(s => {
+                    const newFrom = tr.mapping.map(s.from);
+                    const newTo = tr.mapping.map(s.to);
+                    
+                    // Validate mapped positions are within document bounds
+                    if (newFrom >= 0 && newTo <= tr.doc.nodeSize && newFrom <= newTo) {
+                        return { ...s, from: newFrom, to: newTo };
+                    } else {
+                        console.warn(`🚨 [PLUGIN] Invalid position mapping for suggestion ${s.id}: ${s.from}-${s.to} → ${newFrom}-${newTo}`);
+                        return null; // Mark for removal
+                    }
+                }).filter(Boolean); // Remove invalid suggestions
+
+                decorations = decorations.map(tr.mapping, tr.doc);
+                console.log(`🔧 [PLUGIN] Mapped ${suggestions.length} suggestions through document change`);
+            } catch (error) {
+                console.error('🚨 [PLUGIN] Position mapping failed:', error);
+                // On mapping failure, clear suggestions to prevent corruption
+                suggestions = [];
+                decorations = DecorationSet.empty;
+            }
         }
 
         return new CoreSuggestionState(decorations, suggestions, activeConflict, this.metadata);
@@ -282,34 +309,50 @@ class CoreSuggestionState {
         };
     }
 
-    handleAcceptSuggestion(action, decorations, suggestions) {
-    const { suggestionId } = action;
+    handleAcceptSuggestion(action, decorations, suggestions, tr) {
+        const { suggestionId } = action;
+        
+        console.log(`🔧 [PLUGIN] handleAcceptSuggestion: ${suggestionId}`);
+        console.log(`🔧 [PLUGIN] Input suggestions count: ${suggestions.length}`);
+        console.log(`🔧 [PLUGIN] Input decorations count: ${decorations.find().length}`);
 
-    const decoToRemove = decorations.find().find(d => {
-        const acceptedSuggestionInGroup = suggestions.find(s => s.isConflictGroup && s.suggestions.some(child => child.id === suggestionId));
-        if (acceptedSuggestionInGroup) {
-            return d.type.attrs['data-conflict-group-id'] === acceptedSuggestionInGroup.id;
+        const decoToRemove = decorations.find().find(d => {
+            const acceptedSuggestionInGroup = suggestions.find(s => s.isConflictGroup && s.suggestions.some(child => child.id === suggestionId));
+            if (acceptedSuggestionInGroup) {
+                return d.type.attrs['data-conflict-group-id'] === acceptedSuggestionInGroup.id;
+            }
+            return String(d.type.attrs['data-suggestion-id']) === String(suggestionId);
+        });
+
+        let newDecorations = decorations;
+        if (decoToRemove) {
+            newDecorations = decorations.remove([decoToRemove]);
+            console.log(`🔧 [PLUGIN] Removed decoration for suggestion ${suggestionId}`);
+        } else {
+            console.warn(`⚠️ [PLUGIN] No decoration found for suggestion ${suggestionId}`);
         }
-        return String(d.type.attrs['data-suggestion-id']) === String(suggestionId);
-    });
 
-    let newDecorations = decorations;
-    if (decoToRemove) {
-        newDecorations = decorations.remove([decoToRemove]);
+        // Filter out accepted suggestion - positions handled by apply() method
+        const newSuggestions = suggestions.filter(s => {
+            if (s.isConflictGroup) {
+                return !s.suggestions.some(child => child.id === suggestionId);
+            }
+            return s.id !== suggestionId;
+        });
+
+        console.log(`🔧 [PLUGIN] Filtered ${newSuggestions.length} remaining suggestions after accepting ${suggestionId}`);
+        
+        // Log remaining suggestion positions for debugging
+        if (newSuggestions.length > 0) {
+            const positionMap = newSuggestions.slice(0, 3).map(s => `${s.id}:${s.from}-${s.to}`);
+            console.log(`🔧 [PLUGIN] Sample remaining positions: ${positionMap.join(', ')}`);
+        }
+
+        return {
+            decorations: newDecorations,
+            suggestions: newSuggestions,
+        };
     }
-
-    const newSuggestions = suggestions.filter(s => {
-        if (s.isConflictGroup) {
-            return !s.suggestions.some(child => child.id === suggestionId);
-        }
-        return s.id !== suggestionId;
-    });
-
-    return {
-        decorations: newDecorations,
-        suggestions: newSuggestions,
-    };
-}
 }
 
 /**

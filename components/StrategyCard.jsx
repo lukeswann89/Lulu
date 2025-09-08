@@ -65,31 +65,34 @@ export default function StrategyCard({
 
       {/* 2. The Workbench: Interactive Edit Cards */}
       <div className="mt-4 space-y-3">
-        {edits.length > 0 ? (
-          edits.map((edit, index) => (
-            <SpecificEditCard
-              key={index}
-              edit={edit}
-              index={index}
-              onAccept={(suggestionId, suggestion) => {
-                if (onAcceptChoice) {
-                  onAcceptChoice(suggestionId, suggestion);
-                }
-                handleEditResolved(index);
-              }}
-              onReject={() => handleEditResolved(index)}
-              onRevise={() => handleEditResolved(index)}
-              getEditMeta={getEditMeta}
-              isResolved={resolvedEdits.has(index)}
-            />
-          ))
-        ) : (
-          <div className="text-center py-6">
-             <CheckCircleIcon className="h-12 w-12 text-green-400 mx-auto" />
-             <p className="mt-2 text-sm text-gray-600 font-medium">No specific edits needed for this goal.</p>
-             <p className="text-xs text-gray-500">The AI determined your writing already achieves this objective.</p>
-          </div>
-        )}
+        {/* Guard clause: Only render SpecificEditCard when edits are loaded */}
+        {/* Guard clause: Only render SpecificEditCard when edits are loaded */}
+        {edits && edits.length > 0
+          ? edits.map((edit, index) => (
+              <SpecificEditCard
+                key={index}
+                edit={edit}
+                index={index}
+                onAccept={(suggestionId, suggestion) => {
+                  if (onAcceptChoice) {
+                    onAcceptChoice(suggestionId, suggestion);
+                  }
+                  handleEditResolved(index);
+                }}
+                onReject={() => handleEditResolved(index)}
+                onRevise={() => handleEditResolved(index)}
+                getEditMeta={getEditMeta}
+                isResolved={resolvedEdits.has(index)}
+              />
+            ))
+          : (
+              <div className="text-center py-6">
+                <CheckCircleIcon className="h-12 w-12 text-green-400 mx-auto" />
+                <p className="mt-2 text-sm text-gray-600 font-medium">No specific edits needed for this goal.</p>
+                <p className="text-xs text-gray-500">The AI determined your writing already achieves this objective.</p>
+              </div>
+            )
+        }
       </div>
 
       {/* 3. The "Resolve to Proceed" Action */}
