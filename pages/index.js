@@ -274,6 +274,8 @@ function IndexV2() {
                         lastGrammarCheckTextRef.current = manuscriptText;
                     } catch (error) {
                         console.error("An unexpected error occurred during grammar check:", error);
+                        console.warn("🔴 [RED LINE] Could not connect to the grammar service. Is the LanguageTool server running?");
+                        toast.error("Lulu's grammar service is not available. Please ensure the LanguageTool server is running.");
                         setGrammarSuggestions([]);
                     } finally {
                         setIsGrammarChecking(false);

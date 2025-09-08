@@ -27,24 +27,40 @@ export default async function handler(req, res) {
       });
     }
   
-    try {
-      // Prepare URL-encoded body for LanguageTool API
-      const params = new URLSearchParams();
-      params.append('text', text);
-      params.append('language', 'en-US');
+    try {
+      // Prepare URL-encoded body for LanguageTool API
+      const params = new URLSearchParams();
+      params.append('text', text);
+      params.append('language', 'en-US');
   
-    // --- ARCHITECT'S NOTE: This is the corrected fetch call structure. ---
+      // --- ARCHITECT'S NOTE: This is the corrected fetch call structure. ---
       // It points to the local server and has the correct syntax.
-    const LT_URL = process.env.LT_URL || 'http://localhost:8081';
-    const response = await fetch(`${LT_URL}/v2/check`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-      });
-  
-      // Check if LanguageTool API responded successfully
+      const LT_URL = process.env.LT_URL || 'http://localhost:8081';
+      
+      // Add timeout and better error handling for external service calls
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      let response;
+      try {
+        response = await fetch(`${LT_URL}/v2/check`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        console.error('LanguageTool service unavailable:', fetchError.message);
+        // Return graceful degradation instead of 500 error
+        return res.status(200).json({ 
+          results: [],
+          message: 'Grammar service temporarily unavailable'
+        });
+      }      // Check if LanguageTool API responded successfully
       if (!response.ok) {
         console.error('LanguageTool API error:', response.status, response.statusText);
         return res.status(500).json({ 
