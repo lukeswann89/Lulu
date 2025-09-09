@@ -158,7 +158,8 @@ const MentorWing = ({
                             edits={suggestions || []}
                             isLoading={isFetchingEdits || goalEdits[currentGoal.id]?.status === 'loading'}
                             onComplete={onGoalComplete}
-                            onAcceptChoice={onAcceptChoice}
+                            onAccept={onAcceptChoice}
+                            onReject={onRejectChoice}
                             getEditMeta={getEditMeta}
                         />
                     ) : (
@@ -205,7 +206,7 @@ const MentorWing = ({
                         <SpecificEditsPanel 
                             suggestions={suggestions} 
                             onAccept={onAcceptChoice} 
-                            onReject={() => {}} 
+                            onReject={onRejectChoice} 
                             onRevise={() => {}} 
                             getEditMeta={getEditMeta}
                             simpleMode={true}

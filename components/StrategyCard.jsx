@@ -16,7 +16,8 @@ import SpecificEditCard from './SpecificEditCard';
  * edits: Array<{ original: string, suggestion: string, why: string, severity: string }>,
  * isLoading: boolean,
  * onComplete: () => void,
- * onAcceptChoice: (suggestionId, suggestion) => void,
+ * onAccept: (suggestionId, suggestion) => void,
+ * onReject: (suggestionId) => void,
  * getEditMeta: (type) => object
  * }} props
  */
@@ -25,7 +26,8 @@ export default function StrategyCard({
     edits = [], 
     isLoading, 
     onComplete, 
-    onAcceptChoice,
+    onAccept,
+    onReject,
     getEditMeta 
 }) {
   // --- Internal State ---
@@ -74,12 +76,17 @@ export default function StrategyCard({
                 edit={edit}
                 index={index}
                 onAccept={(suggestionId, suggestion) => {
-                  if (onAcceptChoice) {
-                    onAcceptChoice(suggestionId, suggestion);
+                  if (onAccept) {
+                    onAccept(suggestionId, suggestion);
                   }
                   handleEditResolved(index);
                 }}
-                onReject={() => handleEditResolved(index)}
+                onReject={(suggestionId) => {
+                  if (onReject) {
+                    onReject(suggestionId);
+                  }
+                  handleEditResolved(index);
+                }}
                 onRevise={() => handleEditResolved(index)}
                 getEditMeta={getEditMeta}
                 isResolved={resolvedEdits.has(index)}

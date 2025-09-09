@@ -11,7 +11,7 @@ import EditorialReport from './EditorialReport';
 export default function PolishStudio({
   suggestions = [],
   onAccept = () => {},
-  onReject = () => {},
+  onReject,
   onRevise = () => {},
   onActiveSuggestionChange = () => {},
   getEditMeta,
@@ -118,15 +118,15 @@ export default function PolishStudio({
   const handleReject = useCallback((id) => {
     const targetId = id || activeSuggestionId;
     if (!targetId) return;
-    const targetSuggestion = flatSorted.find(s => s.id === targetId) || null;
     onReject(targetId);
+    // Local UI state for decision tracking (optional, not source of truth)
+    const targetSuggestion = flatSorted.find(s => s.id === targetId) || null;
     if (targetSuggestion) {
       setDecisions(prev => [...prev, { suggestion: targetSuggestion, action: 'reject' }]);
     }
     setTimeout(() => {
       focusNext();
     }, 120);
-    // REMOVED: Local phase transition logic - let the useEffect handle this based on parent state
   }, [activeSuggestionId, onReject, focusNext, flatSorted]);
 
   // Keyboard navigation (N/P/A/R). Ignore when typing in inputs/textareas.

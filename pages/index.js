@@ -737,8 +737,44 @@ useEffect(() => {
         // Now execute the accept logic
         handleAcceptChoice(suggestionId);
     }, [handleAcceptChoice]);
+
+    // CENTRALIZED REJECT HANDLER: Remove suggestion from all active lists and log
+    const handleRejectSuggestion = useCallback((suggestionId) => {
+        console.log(`❌ [REJECT] Rejecting active suggestion: ${suggestionId}`);
+        
+        setPopoverTarget(null);
+        setActivePopoverSuggestion(null);
+        if (popoverCloseTimerRef.current) {
+            clearTimeout(popoverCloseTimerRef.current);
+            popoverCloseTimerRef.current = null;
+        }
+        setSubstantiveSuggestions(prev => {
+            const filtered = prev.filter(s => s.id !== suggestionId);
+            console.log(`❌ [REJECT] SubstantiveSuggestions: ${filtered.length} (was ${prev.length})`);
+            return filtered;
+        });
+        setGrammarSuggestions(prev => {
+            const filtered = prev.filter(s => s.id !== suggestionId);
+            console.log(`❌ [REJECT] GrammarSuggestions: ${filtered.length} (was ${prev.length})`);
+            return filtered;
+        });
+    }, [setSubstantiveSuggestions, setGrammarSuggestions]);
+
+    // Add new wrapper function for popover reject to mirror handlePopoverAccept pattern
+    const handlePopoverReject = useCallback((suggestionId) => {
+        console.log("❌ [REJECT] Popover Reject button clicked for suggestion:", suggestionId);
+        // Proactively hide the popover to prevent UI glitches
+        setPopoverTarget(null);
+        setActivePopoverSuggestion(null);
+        if (popoverCloseTimerRef.current) {
+            clearTimeout(popoverCloseTimerRef.current);
+            popoverCloseTimerRef.current = null;
+        }
+        // Call the main rejection logic
+        handleRejectSuggestion(suggestionId);
+    }, [handleRejectSuggestion]);
+
     const handlePopoverLearnMore = useCallback((suggestion) => console.log("Learn More:", suggestion), []);
-    const handlePopoverIgnore = useCallback((suggestion) => console.log("Ignore:", suggestion), []);
     const handlePopoverClose = useCallback(() => handleSuggestionMouseLeave(), [handleSuggestionMouseLeave]);
     // Editorial Report MVP callback
     const handleApplyWithLulu = useCallback((goal) => {
@@ -939,7 +975,7 @@ useEffect(() => {
                         suggestions={activeSuggestions}
                         activeConflictGroup={activeConflictGroup}
                         onAcceptChoice={handleAcceptChoice}
-                        onRejectChoice={() => {}}
+                        onRejectChoice={handleRejectSuggestion}
                         getEditMeta={getEditMeta}
                         // Additional props for substantive phases
                         currentGoal={currentGoal}
@@ -969,7 +1005,7 @@ useEffect(() => {
                     targetElement={popoverTarget}
                     onAccept={handlePopoverAccept}
                     onLearnMore={handlePopoverLearnMore}
-                    onIgnore={handlePopoverIgnore}
+                    onReject={handlePopoverReject}
                     onClose={handlePopoverClose}
                     onPopoverEnter={handlePopoverMouseEnter}
                     onPopoverLeave={handlePopoverMouseLeave}

@@ -204,7 +204,11 @@ export default function SuggestionCard({
                   <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
                     onClick={() => handleAccept(sug.id)}>Accept</button>
                   <button className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
-                    onClick={() => handleReject(sug.id)}>Reject</button>
+                    onClick={() => {
+                        console.log(`🔴 [SuggestionCard] Reject button clicked for suggestion:`, sug.id);
+                        console.log(`🔴 [SuggestionCard] onReject function type:`, typeof onReject);
+                        onReject(sug.id);
+                    }}>Reject</button>
                   <button className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs"
                     onClick={() => onStartRevise(sug.type || groupType, sug.id, sug.suggestion || sug.recommendation)}>Revise</button>
                 </>
@@ -213,7 +217,11 @@ export default function SuggestionCard({
                   <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
                     onClick={() => handleAccept(sug.id, 'accepted')}>Accept</button>
                   <button className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
-                    onClick={() => handleReject(sug.id, 'rejected')}>Reject</button>
+                    onClick={() => {
+                        console.log(`🔴 [SuggestionCard] Reject button clicked for suggestion:`, sug.id);
+                        console.log(`🔴 [SuggestionCard] onReject function type:`, typeof onReject);
+                        onReject(sug.id);
+                    }}>Reject</button>
                   <button className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs"
                     onClick={() => onStartRevise(sug.type || groupType, sug.id, sug.suggestion || sug.recommendation)}>Revise</button>
                 </>

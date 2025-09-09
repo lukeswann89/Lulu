@@ -33,6 +33,7 @@ export default function SpecificEditsPanel({
   simpleMode = false,
 }) {
   
+  console.log("🔵 [SpecificEditsPanel] onReject function type:", typeof onReject);
   console.log("SpecificEditsPanel props.suggestions:", suggestions);
   
   // Group suggestions by editType/type

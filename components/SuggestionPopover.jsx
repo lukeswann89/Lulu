@@ -10,14 +10,14 @@
 
 import React, { useEffect } from 'react';
 import { Popover } from '@headlessui/react';
-import { CheckIcon, LightBulbIcon, EllipsisHorizontalIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, LightBulbIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 export default function SuggestionPopover({ 
   suggestion, 
   targetElement, 
   onAccept, 
   onLearnMore, 
-  onIgnore, 
+  onDismiss, 
   onClose,
   onPopoverEnter,
   onPopoverLeave
@@ -90,14 +90,17 @@ export default function SuggestionPopover({
               <CheckIcon className="h-4 w-4" />
               <span>Accept</span>
             </button>
-            <div className="flex items-center space-x-2">
-              <button onClick={() => onLearnMore(suggestion)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-md">
-                <LightBulbIcon className="h-4 w-4" />
-              </button>
-              <button onClick={() => onIgnore(suggestion)} className="p-2 text-gray-500 hover:bg-gray-50 rounded-md">
-                <EllipsisHorizontalIcon className="h-4 w-4" />
-              </button>
-            </div>
+            <button 
+              onClick={() => {
+                console.log("❌ [REJECT] Reject button clicked for suggestion:", suggestion.id);
+                onReject(suggestion.id);
+              }} 
+              className="flex items-center space-x-2 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700"
+              title="Reject suggestion"
+            >
+              <XMarkIcon className="h-4 w-4" />
+              <span>Reject</span>
+            </button>
           </div>
         </Popover.Panel>
       </Popover>
