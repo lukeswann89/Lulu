@@ -274,8 +274,7 @@ class CoreSuggestionState {
             if (s.isConflictGroup) {
                 return Decoration.inline(s.from, s.to, {
                     class: 'suggestion-highlight conflict-highlight',
-                    'data-conflict-group-id': s.id,
-                    title: 'Multiple suggestions available. Click to see options.'
+                    'data-conflict-group-id': s.id
                 });
             } else {
                 // --- ARCHITECT'S NOTE: This logic now handles both Active and Passive suggestion types ---
@@ -297,8 +296,7 @@ class CoreSuggestionState {
                 
                 return Decoration.inline(s.from, s.to, {
                     class: finalClass,
-                    'data-suggestion-id': s.id,
-                    title: `${displayType}: Click to replace with "${s.replacement || s.suggestion}"`
+                    'data-suggestion-id': s.id
                 });
             }
         });
@@ -396,6 +394,12 @@ export function createCoreSuggestionPlugin({ onAccept, onConflictClick }) {
             handleClick(view, pos, event) {
                 const target = event.target;
                 if (target.matches('.suggestion-highlight')) {
+                    // SURGICAL FIX: Skip passive suggestions - they're handled by React useEffect
+                    if (target.classList.contains('passive')) {
+                        console.log("� [ARCHITECTURAL FIX] ProseMirror skipping passive suggestion - React handles this");
+                        return false; // Let React useEffect handle passive suggestions
+                    }
+                    
                     const conflictGroupId = target.getAttribute('data-conflict-group-id');
                     const suggestionId = target.getAttribute('data-suggestion-id');
 

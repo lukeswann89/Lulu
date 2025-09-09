@@ -8,7 +8,7 @@
 // - Implements "Coyote Time" delayed close pattern for humane UX
 // - Creates a "safe zone" where users can move mouse to popover without it disappearing
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Popover } from '@headlessui/react';
 import { CheckIcon, LightBulbIcon, EllipsisHorizontalIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
@@ -22,6 +22,28 @@ export default function SuggestionPopover({
   onPopoverEnter,
   onPopoverLeave
 }) {
+  // FORENSIC TRACE: Component lifecycle monitoring
+  useEffect(() => {
+    console.log("🔍 [FORENSIC] SuggestionPopover MOUNTED for suggestion:", suggestion?.id);
+    performance.mark('popover-component-mount');
+    
+    return () => {
+      console.log("🔍 [FORENSIC] SuggestionPopover UNMOUNTING for suggestion:", suggestion?.id);
+      performance.mark('popover-component-unmount');
+      
+      // Measure mount-to-unmount duration
+      try {
+        performance.measure('popover-component-lifetime', 'popover-component-mount', 'popover-component-unmount');
+        const measurements = performance.getEntriesByName('popover-component-lifetime');
+        if (measurements.length > 0) {
+          console.log(`🔍 [FORENSIC] Popover component lifetime: ${measurements[0].duration.toFixed(2)}ms`);
+        }
+      } catch (e) {
+        console.warn("Popover lifecycle measurement failed:", e);
+      }
+    };
+  }, [suggestion?.id]);
+
   if (!suggestion || !targetElement) {
     return null;
   }
@@ -57,7 +79,14 @@ export default function SuggestionPopover({
             </div>
           )}
           <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-            <button onClick={() => onAccept(suggestion.id)} className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
+            <button 
+              onClick={() => {
+                console.log("🔍 [FORENSIC] Popover Accept button clicked for suggestion:", suggestion.id);
+                performance.mark('popover-button-click');
+                onAccept(suggestion.id);
+              }} 
+              className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700"
+            >
               <CheckIcon className="h-4 w-4" />
               <span>Accept</span>
             </button>

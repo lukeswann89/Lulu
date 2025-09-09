@@ -557,6 +557,11 @@ useEffect(() => {
 
     const handleAcceptChoice = useCallback((suggestionId) => {
         console.log("[INSTRUMENT] handleAcceptChoice CREATED. Dependencies:", {substantiveSuggestions, grammarSuggestions});
+        
+        // FORENSIC TRACE: Start of accept operation
+        performance.mark('accept-start');
+        console.log("🔍 [FORENSIC] Accept operation initiated for suggestion:", suggestionId);
+        
         if (!viewRef.current) {
             console.error("[ACCEPT] ViewRef is not available. Aborting.");
             return;
@@ -584,7 +589,12 @@ useEffect(() => {
 
         // --- Step 2: Command "The Will" to update the document ---
         console.log("[INSTRUMENT] Document BEFORE mutation:", docToText(viewRef.current.state.doc));
+        
+        // FORENSIC TRACE: Mark ProseMirror transaction dispatch
+        performance.mark('prosemirror-transaction-start');
         pmAcceptSuggestion(viewRef.current, suggestionId);
+        performance.mark('prosemirror-transaction-dispatch');
+        
         console.log(`✅ [ACCEPT] ProseMirror document updated for suggestion: ${suggestionId}`);
         console.log("[INSTRUMENT] Document AFTER mutation:", docToText(viewRef.current.state.doc));
 
@@ -605,8 +615,41 @@ useEffect(() => {
         console.log(`🧠 [RECONCILE] Remapping complete. ${remappedSuggestions.length} suggestions remain valid.`, remappedSuggestions);
 
         // --- Step 5: Commit the Reconciled State to The Mind ---
+        performance.mark('react-state-update-start');
         setState(remappedSuggestions);
         setActiveConflictGroup(null);
+        performance.mark('react-state-update-complete');
+
+        // FORENSIC MEASUREMENT: Analyze timing
+        setTimeout(() => {
+            try {
+                performance.measure('total-accept-time', 'accept-start', 'react-state-update-complete');
+                performance.measure('prosemirror-transaction-time', 'prosemirror-transaction-start', 'prosemirror-transaction-dispatch');
+                performance.measure('state-reconciliation-time', 'prosemirror-transaction-dispatch', 'react-state-update-complete');
+                
+                // Measure popover timing if markers exist
+                const popoverHideMarks = performance.getEntriesByName('popover-hide-start');
+                if (popoverHideMarks.length > 0) {
+                    performance.measure('popover-hide-time', 'popover-hide-start', 'popover-hide-complete');
+                    performance.measure('popover-to-prosemirror-delay', 'popover-hide-complete', 'prosemirror-transaction-start');
+                }
+                
+                const measurements = performance.getEntriesByType('measure');
+                console.log("🔍 [FORENSIC TIMING ANALYSIS]:");
+                measurements.forEach(measure => {
+                    if (measure.name.includes('accept') || measure.name.includes('prosemirror') || 
+                        measure.name.includes('state') || measure.name.includes('popover')) {
+                        console.log(`  ${measure.name}: ${measure.duration.toFixed(2)}ms`);
+                    }
+                });
+                
+                // Clear markers for next operation
+                performance.clearMarks();
+                performance.clearMeasures();
+            } catch (e) {
+                console.warn("Performance measurement unavailable:", e);
+            }
+        }, 0);
 
     }, [substantiveSuggestions, grammarSuggestions]);
 
@@ -668,14 +711,32 @@ useEffect(() => {
     const handleSuggestionMouseLeave = useCallback(() => {
         // Coyote Time: Schedule delayed close with 300ms grace period
         popoverCloseTimerRef.current = setTimeout(() => {
+            performance.mark('popover-unmount-start');
+            console.log("🔍 [FORENSIC] Popover natural timeout unmount initiated");
             setPopoverTarget(null);
             setActivePopoverSuggestion(null);
             popoverCloseTimerRef.current = null;
+            performance.mark('popover-unmount-complete');
         }, 300);
     }, []);
 
     // Add placeholder handlers for the popover's own buttons
-    const handlePopoverAccept = useCallback((suggestionId) => handleAcceptChoice(suggestionId), [handleAcceptChoice]);
+    const handlePopoverAccept = useCallback((suggestionId) => {
+        // INVESTIGATION #2 FIX: Proactively hide popover before accept to prevent phantom flicker
+        performance.mark('popover-hide-start');
+        console.log("🔍 [FORENSIC] Popover accept clicked, proactively hiding popover");
+        
+        setPopoverTarget(null);
+        setActivePopoverSuggestion(null);
+        if (popoverCloseTimerRef.current) {
+            clearTimeout(popoverCloseTimerRef.current);
+            popoverCloseTimerRef.current = null;
+        }
+        performance.mark('popover-hide-complete');
+        
+        // Now execute the accept logic
+        handleAcceptChoice(suggestionId);
+    }, [handleAcceptChoice]);
     const handlePopoverLearnMore = useCallback((suggestion) => console.log("Learn More:", suggestion), []);
     const handlePopoverIgnore = useCallback((suggestion) => console.log("Ignore:", suggestion), []);
     const handlePopoverClose = useCallback(() => handleSuggestionMouseLeave(), [handleSuggestionMouseLeave]);
@@ -720,14 +781,46 @@ useEffect(() => {
             }
         };
 
+        // INVESTIGATION #1 FIX: Re-implement click-to-accept for passive suggestions
+        const handleClick = (event) => {
+            const target = event.target;
+            if (target.classList.contains('suggestion-highlight') && target.classList.contains('passive')) {
+                // FORENSIC TRACE: Mark the start of accept operation
+                performance.mark('accept-start');
+                console.log("🔍 [FORENSIC] Passive suggestion clicked, initiating accept sequence");
+                
+                const suggestionId = target.getAttribute('data-suggestion-id');
+                if (suggestionId) {
+                    console.log("🔍 [FORENSIC] Calling handleAcceptChoice for suggestion:", suggestionId);
+                    
+                    // Proactively hide popover before ProseMirror transaction to prevent phantom flicker
+                    performance.mark('popover-hide-start');
+                    setPopoverTarget(null);
+                    setActivePopoverSuggestion(null);
+                    if (popoverCloseTimerRef.current) {
+                        clearTimeout(popoverCloseTimerRef.current);
+                        popoverCloseTimerRef.current = null;
+                    }
+                    performance.mark('popover-hide-complete');
+                    
+                    // Now execute the accept logic
+                    handleAcceptChoice(suggestionId);
+                }
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        };
+
         editorContainer.addEventListener('mouseenter', handleMouseEnter, true);
         editorContainer.addEventListener('mouseleave', handleMouseLeave, true);
+        editorContainer.addEventListener('click', handleClick, true);
 
         return () => {
             editorContainer.removeEventListener('mouseenter', handleMouseEnter, true);
             editorContainer.removeEventListener('mouseleave', handleMouseLeave, true);
+            editorContainer.removeEventListener('click', handleClick, true);
         };
-    }, [handleSuggestionMouseEnter, handleSuggestionMouseLeave]);
+    }, [handleSuggestionMouseEnter, handleSuggestionMouseLeave, handleAcceptChoice]);
 
     // Render Components for Sophisticated Writer's Desk
     const renderManuscript = () => (
