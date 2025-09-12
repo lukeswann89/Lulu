@@ -9,3 +9,68 @@
   text-decoration-style: wavy;
   background-color: rgba(255, 0, 0, 0.05);
 }
+
+/* === START: Definitive Living Page Hover CSS === */
+
+/* Breathing Animation Keyframes - 4s fade in, 6s fade out */
+@keyframes breathing {
+  0% {
+    border-color: rgba(168, 85, 247, 0.2);
+  }
+  40% {
+    border-color: rgba(168, 85, 247, 0.6);
+  }
+  100% {
+    border-color: rgba(168, 85, 247, 0.2);
+  }
+}
+
+/* Page Container Base Styles */
+.page-container {
+  border: 2px solid;
+  animation: breathing 10s ease-in-out infinite;
+  transition: border-color 250ms ease-in-out;
+}
+
+/* Animate Breathing Utility Class */
+.animate-breathing {
+  animation: breathing 10s ease-in-out infinite;
+}
+
+/* This rule stops the breathing animation but preserves current border colors on hover */
+.page-container:has(.edge-hover-zone:hover) {
+  animation-play-state: paused;
+}
+
+/* Override Tailwind's overflow-hidden to allow glow visibility */
+.page-container {
+  overflow: visible !important;
+}
+
+/* Individual edge hover effects - Enhanced border with proper glow and outward expansion */
+.page-container:has(.top-edge:hover) {
+  border-top-width: 3px !important;
+  border-top-color: rgba(168, 85, 247, 1.0) !important;
+  box-shadow: 0 -8px 16px -4px rgba(168, 85, 247, 0.6) !important;
+  transform: translateY(-1px) !important;
+}
+.page-container:has(.right-edge:hover) {
+  border-right-width: 3px !important;
+  border-right-color: rgba(168, 85, 247, 1.0) !important;
+  box-shadow: 8px 0 16px -4px rgba(168, 85, 247, 0.6) !important;
+  transform: translateX(1px) !important;
+}
+.page-container:has(.bottom-edge:hover) {
+  border-bottom-width: 3px !important;
+  border-bottom-color: rgba(168, 85, 247, 1.0) !important;
+  box-shadow: 0 8px 16px -4px rgba(168, 85, 247, 0.6) !important;
+  transform: translateY(1px) !important;
+}
+.page-container:has(.left-edge:hover) {
+  border-left-width: 3px !important;
+  border-left-color: rgba(168, 85, 247, 1.0) !important;
+  box-shadow: -8px 0 16px -4px rgba(168, 85, 247, 0.6) !important;
+  transform: translateX(-1px) !important;
+}
+
+/* === END: Definitive Hover CSS === */
