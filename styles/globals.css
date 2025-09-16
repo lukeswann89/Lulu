@@ -73,4 +73,18 @@
   transform: translateX(-1px) !important;
 }
 
+/* Extended hover zones for seamless gutter integration */
+.page-container:has(.left-extended:hover) {
+  border-left-width: 3px !important;
+  border-left-color: rgba(168, 85, 247, 1.0) !important;
+  box-shadow: -8px 0 16px -4px rgba(168, 85, 247, 0.6) !important;
+  transform: translateX(-1px) !important;
+}
+.page-container:has(.right-extended:hover) {
+  border-right-width: 3px !important;
+  border-right-color: rgba(168, 85, 247, 1.0) !important;
+  box-shadow: 8px 0 16px -4px rgba(168, 85, 247, 0.6) !important;
+  transform: translateX(1px) !important;
+}
+
 /* === END: Definitive Hover CSS === */
