@@ -82,6 +82,7 @@ const ManuscriptView = () => {
           className="relative z-20"
         >
           <Page
+            activeWing={activeWing}
             onLeftWingClick={() => setActiveWing(activeWing === 'muse' ? null : 'muse')}
             onRightWingClick={() => setActiveWing(activeWing === 'mentor' ? null : 'mentor')}
             onTopWingClick={() => {/* Future: top wing functionality */}}

@@ -1,8 +1,16 @@
 import React from 'react';
 
-const Page = ({ children, onLeftWingClick, onRightWingClick, onTopWingClick, onBottomWingClick }) => {
+const Page = ({ children, activeWing, onLeftWingClick, onRightWingClick, onTopWingClick, onBottomWingClick }) => {
+  // Determine persistent classes based on active wing
+  let persistentClasses = '';
+  if (activeWing === 'mentor') {
+    persistentClasses = 'rightWingOpen';
+  } else if (activeWing === 'muse') {
+    persistentClasses = 'leftWingOpen';
+  }
+
   return (
-    <div className="page-container relative bg-white shadow-lg w-[794px] h-[1123px] overflow-hidden border-2 animate-breathing">
+    <div className={`page-container relative bg-white shadow-lg w-[794px] h-[1123px] overflow-hidden border-2 animate-breathing ${persistentClasses}`}>
       {/* Expanded hover zones that also handle clicks */}
       <div 
         className="edge-hover-zone top-edge absolute z-10 top-[-37px] left-[-37px] right-[-37px] h-[40px] cursor-pointer" 

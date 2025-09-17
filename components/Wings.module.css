@@ -1,15 +1,15 @@
 /* Main container for both Mentor and Muse wings */
 .wingContainer {
   position: fixed;
-  top: 100px;
-  width: 370px;
+  top: 32px;
+  width: 450px;
   height: 550px;
   z-index: 10; /* Permanent z-index - always behind manuscript (z-index: 20) */
   
   background: linear-gradient(to bottom, #faf5ff, #f3e8ff); /* Subtle purple gradient */
-  border: 1px solid rgba(168, 85, 247, 0.8);
+  border: 2px solid rgba(168, 85, 247, 0.8);
   box-shadow: 0 8px 24px -4px rgba(168, 85, 247, 0.4);
-  border-radius: 12px;
+  border-radius: 0;
   padding: 1.5rem;
   
   /* No default transform - positioning handled by JavaScript inline styles */
@@ -23,6 +23,9 @@
 
 .wingContainer.mentorWing.visible {
   transform: translateX(0); /* Slide out to the right */
+  /* Luminous Seam: complementary 2.5D effect */
+  box-shadow: -8px 0 16px -4px rgba(168, 85, 247, 0.4);
+  border-left: 3px solid rgba(168, 85, 247, 1.0);
 }
 
 /* Muse Wing - starts hidden under manuscript, slides left */
@@ -32,6 +35,9 @@
 
 .wingContainer.museWing.visible {
   transform: translateX(-100%); /* Slide out to the left (full width + gap) */
+  /* Luminous Seam: complementary 2.5D effect */
+  box-shadow: 8px 0 16px -4px rgba(168, 85, 247, 0.4);
+  border-right: 3px solid rgba(168, 85, 247, 1.0);
 }
 
 /* Styling for the close button */
